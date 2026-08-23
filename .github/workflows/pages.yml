@@ -1,0 +1,149 @@
+# =============================================================================
+#  ImmersiTest — GitHub Pages VISUAL PREVIEW
+#
+#  Publishes the existing web/ frontend to GitHub Pages so the layout, styling
+#  and navigation can be reviewed in a browser. It is a preview only.
+#
+#  WHAT THIS IS NOT
+#    Pages is static hosting. There is no Express server behind it, so every
+#    /api/* call 404s. Home, New Test and Help render; uploading a report,
+#    opening #/r/<token>, XR Validation persistence and real PDFs do not work.
+#    The functional deployment is Hostinger, where the same Express process
+#    serves web/ and the API together.
+#
+#  WHY A REWRITE STEP EXISTS
+#    The app is served at the domain ROOT in production, so a few paths are
+#    root-absolute. Under project Pages the site lives at /<repo>/ instead, and
+#    a root-absolute /shared/... would resolve above the site and 404. Because
+#    those are STATIC ES module imports, one 404 aborts the whole module graph
+#    and the page renders blank.
+#
+#    The rewrite therefore happens ONLY on the copied artifact. Nothing under
+#    web/, server/, shared/, unity/ or scripts/ is modified, so the Hostinger
+#    deployment is completely unaffected.
+# =============================================================================
+
+name: Deploy web/ preview to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+    # Only rebuild when something the preview actually contains changes.
+    paths:
+      - 'web/**'
+      - 'shared/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Never let two deployments race; let an in-flight one finish.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      # postinstall (scripts/vendor-assets.js) copies Chart.js and jsPDF into
+      # web/vendor/. That folder is gitignored, so this step is the ONLY way the
+      # vendor libraries reach the artifact. Do not add --ignore-scripts here.
+      - name: Install dependencies (generates web/vendor)
+        run: npm ci
+
+      - name: Verify vendor libraries were generated
+        run: |
+          set -e
+          for f in web/vendor/chart.umd.js web/vendor/jspdf.umd.min.js; do
+            if [ ! -s "$f" ]; then
+              echo "::error::$f missing or empty — postinstall did not run."
+              exit 1
+            fi
+            echo "  ok  $f ($(wc -c < "$f") bytes)"
+          done
+
+      # ---- assemble the artifact -------------------------------------------
+      # Only web/ and shared/ are copied. server/, unity/, scripts/, docs/,
+      # data/, dist/, node_modules/ and any .env are never placed in the site.
+      - name: Assemble Pages artifact
+        env:
+          BASE: /${{ github.event.repository.name }}
+        run: |
+          set -e
+          rm -rf _site
+          mkdir -p _site
+
+          cp -r web/. _site/
+          mkdir -p _site/shared
+          cp -r shared/. _site/shared/
+
+          # The artifact is served as-is; this just stops Jekyll ever touching it.
+          touch _site/.nojekyll
+
+          echo "BASE=$BASE"
+
+          # --- rewrite 1: the shared metrics module ---------------------------
+          # 6 files import it root-absolutely. Under /<repo>/ that resolves above
+          # the site, so the specifier is re-pointed at the copied module.
+          grep -rl "from '/shared/" _site --include='*.js' | while read -r f; do
+            sed -i "s|from '/shared/|from '${BASE}/shared/|g" "$f"
+            echo "  rewrote /shared/ import -> ${f#_site/}"
+          done
+
+          # --- rewrite 2: root-absolute asset hrefs ---------------------------
+          # Currently just the favicon in index.html.
+          sed -i "s|href=\"/assets/|href=\"${BASE}/assets/|g" _site/index.html
+          echo "  rewrote /assets/ href in index.html"
+
+      - name: Verify no root-absolute paths survive
+        run: |
+          set -e
+          fail=0
+          if grep -rn "from '/shared/" _site --include='*.js'; then
+            echo "::error::unrewritten /shared/ import left in the artifact"; fail=1
+          fi
+          if grep -n 'href="/assets/' _site/index.html; then
+            echo "::error::unrewritten /assets/ href left in the artifact"; fail=1
+          fi
+          for f in index.html app.js styles.css shared/xr-metrics/index.js \
+                   vendor/chart.umd.js vendor/jspdf.umd.min.js \
+                   assets/favicon-wizardlenz.png assets/wizardlenz-logo.png; do
+            [ -e "_site/$f" ] || { echo "::error::missing from artifact: $f"; fail=1; }
+          done
+          # nothing server-side may ever be published
+          for d in server node_modules data dist unity scripts docs; do
+            [ -e "_site/$d" ] && { echo "::error::$d must not be in the artifact"; fail=1; }
+          done
+          [ -e "_site/.env" ] && { echo "::error::.env must never be published"; fail=1; }
+          exit $fail
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
