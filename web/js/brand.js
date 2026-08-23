@@ -22,11 +22,12 @@ export const COMPANY_URL = 'https://wizardlenzxrstudio.com/';
  * ===========================================================================
  * Unity Asset Store destination for the ImmersiTest package.
  *
- * This currently points at the Asset Store itself. When the listing URL is
- * issued, change this ONE constant — every call to action on the site reads
- * from it, so nothing else needs touching.
+ * This is a PLACEHOLDER listing URL: the package is not published yet, so the
+ * slug is a stand-in. When the real listing is issued, change this ONE
+ * constant — every call to action on the site reads from it, so nothing
+ * else needs touching.
  */
-export const UNITY_ASSET_STORE_URL = 'https://assetstore.unity.com/';
+export const UNITY_ASSET_STORE_URL = 'https://assetstore.unity.com/packages/slug/402312';
 
 /** Copy for the "get the Unity package" call to action. */
 export const unityCta = () => ({
