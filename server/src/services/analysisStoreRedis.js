@@ -41,33 +41,50 @@ const hashOf = (text) => createHash('sha256').update(text, 'utf8').digest('hex')
 let client = null;
 
 /**
- * Accepts either naming convention:
- *   Vercel KV        -> KV_REST_API_URL / KV_REST_API_TOKEN
- *   Upstash direct   -> UPSTASH_REDIS_REST_URL / UPSTASH_REDIS_REST_TOKEN
+ * A single connection URL is all this driver needs.
+ *
+ *   Vercel KV  -> KV_REDIS_URL (also seen as KV_URL)
+ *   any Redis  -> REDIS_URL
+ *
+ * `rediss://` selects TLS automatically, which is what managed providers issue.
  */
-export function redisCredentials(env = process.env) {
-  const url = env.KV_REST_API_URL ?? env.UPSTASH_REDIS_REST_URL ?? null;
-  const token = env.KV_REST_API_TOKEN ?? env.UPSTASH_REDIS_REST_TOKEN ?? null;
-  return url && token ? { url, token } : null;
+export function redisUrl(env = process.env) {
+  const url = env.KV_REDIS_URL ?? env.KV_URL ?? env.REDIS_URL ?? null;
+  return typeof url === 'string' && url.trim() ? url.trim() : null;
 }
 
-export const isConfigured = () => redisCredentials() !== null;
+export const isConfigured = () => redisUrl() !== null;
 
 /**
- * The client library is imported lazily so the memory driver — and therefore
- * local development and the test suite — never loads it at all.
+ * One client per process, created on first use.
+ *
+ * The module is imported lazily so the memory driver — and therefore local
+ * development and the test suite — never loads it at all.
+ *
+ * Serverless note: the connection is held at module scope so a warm instance
+ * reuses it instead of reconnecting per request. `lazyConnect` keeps a cold
+ * start from paying for a handshake it may not need, and the retry ceiling
+ * stops a request hanging on an unreachable server.
  */
 async function redis() {
   if (client) return client;
-  const creds = redisCredentials();
-  if (!creds) {
+  const url = redisUrl();
+  if (!url) {
     throw new Error(
-      'Redis store selected but no credentials found. Set KV_REST_API_URL and '
-      + 'KV_REST_API_TOKEN (or the UPSTASH_REDIS_REST_* equivalents).',
+      'Redis store selected but no connection URL found. Set KV_REDIS_URL '
+      + '(or KV_URL / REDIS_URL).',
     );
   }
-  const { Redis } = await import('@upstash/redis');
-  client = new Redis(creds);
+  const { default: Redis } = await import('ioredis');
+  client = new Redis(url, {
+    lazyConnect: true,
+    maxRetriesPerRequest: 2,
+    enableReadyCheck: false,
+    connectTimeout: 8000,
+  });
+  // Without a listener a transient drop becomes an unhandled 'error' event and
+  // takes the process down; the command itself still surfaces the failure.
+  client.on('error', (err) => console.warn('[immersitest] redis:', err.message));
   return client;
 }
 
@@ -86,7 +103,9 @@ async function save(session) {
   // Already past its expiry — let it disappear rather than resurrect it.
   if (exat * 1000 <= Date.now()) return session;
   const r = await redis();
-  await r.set(keyFor(session.token), JSON.stringify(session), { exat });
+  // EXAT (absolute unix seconds), never EX (relative): a mutation must not buy
+  // the session more time than it started with.
+  await r.set(keyFor(session.token), JSON.stringify(session), 'EXAT', exat);
   return session;
 }
 
@@ -120,7 +139,7 @@ export async function reset() {
   const r = await redis();
   let cursor = '0';
   do {
-    const [next, keys] = await r.scan(cursor, { match: `${KEY_PREFIX}*`, count: 200 });
+    const [next, keys] = await r.scan(cursor, 'MATCH', `${KEY_PREFIX}*`, 'COUNT', 200);
     cursor = String(next);
     if (keys.length) await r.del(...keys);
   } while (cursor !== '0');
@@ -217,7 +236,7 @@ export async function stats() {
     let cursor = '0';
     let n = 0;
     do {
-      const [next, keys] = await r.scan(cursor, { match: `${KEY_PREFIX}*`, count: 500 });
+      const [next, keys] = await r.scan(cursor, 'MATCH', `${KEY_PREFIX}*`, 'COUNT', 500);
       cursor = String(next);
       n += keys.length;
     } while (cursor !== '0' && n < 5000);

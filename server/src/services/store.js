@@ -11,8 +11,7 @@
  *                                            requests may hit two instances.
  *
  * Selection is by environment, never by code change:
- *   - KV_REST_API_URL + KV_REST_API_TOKEN        (Vercel KV), or
- *   - UPSTASH_REDIS_REST_URL + _TOKEN            (Upstash direct)
+ *   - KV_REDIS_URL  (Vercel KV; also read as KV_URL or REDIS_URL)
  *   - XRLAB_STORE=memory|redis                   explicit override
  *
  * With no credentials present the memory driver is used, so local development

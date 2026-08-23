@@ -40,6 +40,12 @@ namespace Wizardlenz.ImmersiTest.Editor
         private const string KeyStartedTicks = "Wizardlenz.XRTestLab.RunStartedTicks";
         private const string KeyPending = "Wizardlenz.XRTestLab.PendingReport";
 
+        /// <summary>True when the run began from ImmersiTest &gt; Run XR Test.</summary>
+        private const string KeyExplicit = "Wizardlenz.XRTestLab.RunExplicit";
+
+        /// <summary>Path + write stamp of the last report auto-uploaded this session.</summary>
+        private const string KeyLastUploaded = "Wizardlenz.XRTestLab.LastAutoUploaded";
+
         /// <summary>Set once Register() has run, so double registration is a no-op.</summary>
         private static bool _registered;
 
@@ -60,20 +66,41 @@ namespace Wizardlenz.ImmersiTest.Editor
             EditorApplication.playModeStateChanged += OnPlayModeChanged;
         }
 
-        /// <summary>Marks the next Play Mode session as an ImmersiTest run.</summary>
+        /// <summary>Marks the next Play Mode session as an explicit ImmersiTest run.</summary>
         public static void BeginRun()
         {
             // Make sure the hook exists even if this is the very first call on a
             // fresh domain and neither load hook has run yet.
             Register();
-            SessionState.SetBool(KeyActive, true);
+            Arm();
+            SessionState.SetBool(KeyExplicit, true);
             SessionState.EraseString(KeyPending);
-            // A tick before entry, so a report written immediately still counts.
+        }
+
+        /// <summary>
+        /// Timestamps the start of a Play Mode session, so the report written by
+        /// that session can be told apart from older files in the folder.
+        /// </summary>
+        private static void Arm()
+        {
+            SessionState.SetBool(KeyActive, true);
+            // A second of slack, so a report written the instant Play begins still counts.
             SessionState.SetString(KeyStartedTicks, (DateTime.UtcNow.Ticks - TimeSpan.TicksPerSecond).ToString());
         }
 
         private static void OnPlayModeChanged(PlayModeStateChange state)
         {
+            // Arm on EVERY entry into Play Mode, not only runs launched from the
+            // ImmersiTest menu. Pressing Unity's own Play button is the normal way
+            // people test, and it must produce a report just the same — previously
+            // the flag was only set by Run XR Test, so an ordinary Play/Stop
+            // captured the JSON and then silently did nothing with it.
+            if (state == PlayModeStateChange.EnteredPlayMode)
+            {
+                if (!SessionState.GetBool(KeyActive, false)) Arm();
+                return;
+            }
+
             if (state != PlayModeStateChange.EnteredEditMode) return;
             if (!SessionState.GetBool(KeyActive, false)) return;
 
@@ -84,27 +111,42 @@ namespace Wizardlenz.ImmersiTest.Editor
             long.TryParse(SessionState.GetString(KeyStartedTicks, "0"), out ticks);
             var since = ticks > 0 ? new DateTime(ticks, DateTimeKind.Utc) : DateTime.UtcNow.AddMinutes(-10);
 
+            bool explicitRun = SessionState.GetBool(KeyExplicit, false);
+            SessionState.SetBool(KeyExplicit, false);
+
             // Deferred: give the profiler's file write a moment to land, and avoid
             // starting a web request while Unity is still tearing down Play Mode.
-            EditorApplication.delayCall += () => Finish(since);
+            EditorApplication.delayCall += () => Finish(since, explicitRun);
         }
 
-        private static void Finish(DateTime since)
+        private static void Finish(DateTime since, bool explicitRun)
         {
-            string report = NewestReportSince(since);
+            var newest = NewestReportSince(since);
 
-            if (report == null)
+            if (newest == null)
             {
-                Debug.LogWarning(
-                    "[ImmersiTest] The test finished but no report file was found in "
-                    + XRTestProfiler.ReportFolder()
-                    + ".\nCheck the Console for \"[ImmersiTest] Session STARTED\" — if it is missing, the "
-                    + "profiler did not run.");
+                // A Play session that produced nothing is only noteworthy when the
+                // user actually asked for a test. Pressing Play for unrelated work
+                // must stay silent.
+                if (explicitRun)
+                {
+                    Debug.LogWarning(
+                        "[ImmersiTest] The test finished but no report file was found in "
+                        + XRTestProfiler.ReportFolder()
+                        + ".\nCheck the Console for \"[ImmersiTest] Session STARTED\" — if it is missing, the "
+                        + "profiler did not run.");
+                }
                 return;
             }
 
-            Debug.Log("[ImmersiTest] REPORT FOUND: " + report);
-            Analyse(report);
+            // One report is uploaded once. Guards against a second delayCall and
+            // against a later Play session that produced no new file of its own.
+            var stamp = newest.FullName + "|" + newest.LastWriteTimeUtc.Ticks;
+            if (SessionState.GetString(KeyLastUploaded, string.Empty) == stamp) return;
+            SessionState.SetString(KeyLastUploaded, stamp);
+
+            Debug.Log("[ImmersiTest] REPORT FOUND: " + newest.FullName);
+            Analyse(newest.FullName);
         }
 
         /// <summary>
@@ -144,7 +186,7 @@ namespace Wizardlenz.ImmersiTest.Editor
         }
 
         /// <summary>Newest xrtest_*.json written at or after <paramref name="since"/>.</summary>
-        private static string NewestReportSince(DateTime since)
+        private static FileInfo NewestReportSince(DateTime since)
         {
             var folder = XRTestProfiler.ReportFolder();
             if (!Directory.Exists(folder)) return null;
@@ -155,7 +197,6 @@ namespace Wizardlenz.ImmersiTest.Editor
                     .GetFiles("xrtest_*.json")
                     .Where(f => f.LastWriteTimeUtc >= since)
                     .OrderByDescending(f => f.LastWriteTimeUtc)
-                    .Select(f => f.FullName)
                     .FirstOrDefault();
             }
             catch (Exception e)
