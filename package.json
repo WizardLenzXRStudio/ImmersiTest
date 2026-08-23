@@ -1,0 +1,25 @@
+{
+  "name": "xr-test-lab",
+  "version": "2.0.0",
+  "private": true,
+  "type": "module",
+  "description": "XR Test Lab — XR application testing and analysis by Wizardlenz XR Studio",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "start": "node server/src/index.js",
+    "dev": "node --watch server/src/index.js",
+    "start:hosted:dev": "node scripts/dev-hosted.js",
+    "test": "node --test \"server/tests/**/*.test.js\"",
+    "package:unity": "node scripts/build-unity-package.js",
+    "package:assetstore": "node scripts/build-unitypackage.js",
+    "postinstall": "node scripts/vendor-assets.js"
+  },
+  "dependencies": {
+    "chart.js": "^4.4.7",
+    "exceljs": "^4.4.0",
+    "express": "^5.0.1",
+    "jspdf": "^2.5.2"
+  }
+}

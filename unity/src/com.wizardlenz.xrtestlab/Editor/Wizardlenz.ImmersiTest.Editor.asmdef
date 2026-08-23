@@ -1,0 +1,14 @@
+{
+  "name": "Wizardlenz.ImmersiTest.Editor",
+  "rootNamespace": "Wizardlenz.ImmersiTest.Editor",
+  "references": ["Wizardlenz.ImmersiTest"],
+  "includePlatforms": ["Editor"],
+  "excludePlatforms": [],
+  "allowUnsafeCode": false,
+  "overrideReferences": false,
+  "precompiledReferences": [],
+  "autoReferenced": true,
+  "defineConstraints": [],
+  "versionDefines": [],
+  "noEngineReferences": false
+}

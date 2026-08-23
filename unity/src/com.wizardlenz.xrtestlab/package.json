@@ -1,0 +1,21 @@
+{
+  "name": "com.wizardlenz.xrtestlab",
+  "version": "2.0.0",
+  "displayName": "ImmersiTest",
+  "description": "ImmersiTest — XR application testing and analysis. Capture performance from a Unity XR project and analyse it in your browser.\n\nOnly the generated profiler JSON is ever uploaded. Your project, C# source, scenes, prefabs, assets and repository never leave your machine.\n\nWizardlenz XR Studio — Test the Experience. Trust the Immersion.",
+  "unity": "2021.3",
+  "author": {
+    "name": "Wizardlenz XR Studio",
+    "url": "https://wizardlenz.com"
+  },
+  "keywords": [
+    "xr",
+    "vr",
+    "ar",
+    "testing",
+    "qa",
+    "performance",
+    "profiler"
+  ],
+  "hideInEditor": false
+}

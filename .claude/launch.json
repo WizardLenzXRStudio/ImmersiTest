@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "xr-test-lab",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["start"],
+      "port": 3000
+    },
+    {
+      "name": "xr-test-lab-hosted",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "start:hosted:dev"],
+      "port": 3200
+    }
+  ]
+}

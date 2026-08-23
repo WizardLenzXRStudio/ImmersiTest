@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="ImmersiTest — Test the Experience. Trust the Immersion. A free XR application testing and analysis tool by Wizardlenz XR Studio.">
+<meta name="color-scheme" content="dark">
+<title>ImmersiTest</title>
+<!-- Root-absolute on purpose. The server serves index.html for any non-/api
+     path, so a relative href would resolve against a deep URL and come back as
+     HTML instead of the image. -->
+<link rel="icon" type="image/png" sizes="512x512" href="/assets/favicon-wizardlenz.png">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<a class="skip-link" href="#main">Skip to main content</a>
+
+<!-- Ambient depth (CSS-driven) and The Field (cursor-reactive vector lattice).
+     Both are purely decorative and are removed for reduced motion / touch. -->
+<div class="aurora" aria-hidden="true"><span></span><span></span></div>
+<canvas id="field" aria-hidden="true"></canvas>
+<div class="scanline" aria-hidden="true"></div>
+<div class="telemetry" aria-hidden="true">
+  <span class="t-tl">SYS / IMMERSITEST</span>
+  <span class="t-tr">MODE / DIAGNOSTIC</span>
+  <span class="t-bl">LENS / FOCUS · INSPECT · DIAGNOSE</span>
+  <span class="t-br">WZL · XR</span>
+</div>
+
+<!-- Brand gradient used by the score ring; defined once, referenced by SVG. -->
+<svg width="0" height="0" aria-hidden="true" focusable="false" style="position:absolute">
+  <defs>
+    <linearGradient id="ringGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#5B8CFF"/>
+      <stop offset="55%"  stop-color="#7C6BF5"/>
+      <stop offset="100%" stop-color="#A981F7"/>
+    </linearGradient>
+    <linearGradient id="markGrad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%"   stop-color="#7FA6FF"/>
+      <stop offset="55%"  stop-color="#7C6BF5"/>
+      <stop offset="100%" stop-color="#A981F7"/>
+    </linearGradient>
+  </defs>
+</svg>
+
+<header class="topbar">
+ <!-- Shares the content measure with .main, so the nav, the hero and every
+      section below line up on one edge. -->
+ <div class="topbar-inner">
+  <!-- Vendor mark, then the product. ImmersiTest is the primary identity;
+       Wizardlenz XR Studio is deliberately the quieter, smaller element. -->
+  <a class="brand" href="#/" aria-label="ImmersiTest — Test the Experience. Trust the Immersion. Built by Wizardlenz XR Studio">
+    <img class="vendor-logo" src="assets/wizardlenz-logo.png"
+         width="620" height="159" decoding="async"
+         alt="Wizardlenz XR Studio">
+    <span class="brand-divider" aria-hidden="true"></span>
+    <span class="brand-text">
+      <span class="mark">ImmersiTest</span>
+      <span class="sub">Test the Experience. Trust the Immersion.</span>
+    </span>
+  </a>
+  <!-- Populated by app.js: the navigation differs between the hosted service
+       and a local development instance. -->
+  <nav class="mainnav" id="mainnav" aria-label="Main"></nav>
+  <div class="spacer"></div>
+  <div class="topbar-actions" id="topbarActions"></div>
+ </div>
+</header>
+
+<div class="layout">
+  <main class="main" id="main" tabindex="-1"></main>
+</div>
+
+<!-- Rendered by app.js: the copyright year is evaluated at runtime. -->
+<footer class="sitefoot" id="sitefoot"></footer>
+
+<div class="overlay" id="overlay"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<!-- Vendored locally by `npm install` so the app works with no internet. -->
+<script src="vendor/chart.umd.js"></script>
+<script src="vendor/jspdf.umd.min.js"></script>
+<script type="module" src="app.js"></script>
+</body>
+</html>

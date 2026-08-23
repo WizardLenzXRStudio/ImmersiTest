@@ -1,0 +1,1372 @@
+/* =============================================================================
+   XR TEST LAB — Test the Experience. Trust the Immersion.
+
+   Visual system: immersive QA command centre.
+   Deep graphite foundation, electric cyan as the single XR accent, and
+   green/amber/red reserved EXCLUSIVELY for PASS / WARN / FAIL so a colour
+   always means a verdict. Technical grid + restrained depth. Metrics are set
+   in monospace with tabular figures so columns of numbers align optically.
+
+   Fonts are system stacks on purpose: the application must run on an offline
+   lab PC, so no webfont CDN is referenced anywhere.
+   ============================================================================= */
+
+:root{
+  /* ---- foundation: obsidian through midnight blue, never pure black ---- */
+  --bg:#080A11;           /* obsidian */
+  --bg-deep:#05060C;
+  --surface:#111421;      /* deep graphite with an indigo cast */
+  --surface-2:#161A2A;
+  --surface-3:#1C2134;
+  --line:#262C42;
+  --line-soft:#1D2233;
+
+  /* ---- typography ---- */
+  --txt:#EEF1F8;          /* warm white  — 17.4:1 on --bg */
+  --txt-2:#9CA6BE;        /* muted grey  —  7.9:1 on --bg */
+  --txt-3:#7C86A0;        /* tertiary    —  5.2:1 on --bg, clears WCAG AA */
+
+  /* ---- brand spectrum: electric blue -> royal indigo -> violet ----
+     Used for identity, focus and score visualisation only. Verdict colours
+     below are deliberately outside this family so a hue always reads as a
+     verdict, never as branding. */
+  --accent:#5B8CFF;        /* electric blue — primary */
+  --accent-bright:#8AAEFF;
+  --indigo:#7C6BF5;        /* royal indigo — mid stop */
+  --violet:#A981F7;        /* violet — far stop */
+  --accent-soft:rgba(91,140,255,.13);
+  --accent-line:rgba(91,140,255,.34);
+  --accent-glow:rgba(91,140,255,.22);
+  --brand-grad:linear-gradient(120deg,var(--accent) 0%,var(--indigo) 52%,var(--violet) 100%);
+
+  /* ---- verdict colours: PASS / WARN / FAIL only ---- */
+  --pass:#3FD07A; --pass-soft:rgba(63,208,122,.12); --pass-line:rgba(63,208,122,.34);
+  --warn:#E8B34A; --warn-soft:rgba(232,179,74,.12); --warn-line:rgba(232,179,74,.34);
+  --fail:#FF5C57; --fail-soft:rgba(255,92,87,.12);  --fail-line:rgba(255,92,87,.34);
+
+  --sans:'Segoe UI Variable Display','Inter var',Inter,-apple-system,BlinkMacSystemFont,
+         'SF Pro Display','Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;
+  --mono:'JetBrains Mono','SF Mono','Cascadia Mono','Fira Code',ui-monospace,
+         Menlo,Consolas,'Liberation Mono',monospace;
+
+  --r:12px;
+  --r-sm:8px;
+  --shell-h:60px;
+
+  /* dense dashboard spacing scale */
+  --s1:4px; --s2:8px; --s3:12px; --s4:16px; --s5:24px; --s6:32px;
+
+  --ease:cubic-bezier(.16,1,.3,1);
+  --dur:260ms;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  background:var(--bg);
+  color:var(--txt);
+  font-family:var(--sans);
+  font-size:15px;
+  line-height:1.55;
+  -webkit-font-smoothing:antialiased;
+  text-rendering:optimizeLegibility;
+}
+
+/* Technical grid. Non-informational texture, never animated. */
+body::before{
+  content:'';position:fixed;inset:0;z-index:0;pointer-events:none;
+  background-image:
+    linear-gradient(rgba(124,107,245,.030) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(124,107,245,.030) 1px,transparent 1px);
+  background-size:60px 60px;
+  mask-image:radial-gradient(ellipse 120% 80% at 50% 0%,#000 28%,transparent 76%);
+}
+
+/* ---- ambient depth: a very slow blue -> indigo -> violet aurora ----
+   Two large, heavily blurred fields drifting on a 70-90s cycle. Transform and
+   opacity only, so it stays on the compositor and costs no layout work. The
+   goal is "the environment feels alive", never "look at this animation". */
+.aurora{position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;
+  contain:strict;mask-image:linear-gradient(180deg,#000 0%,#000 46%,transparent 88%)}
+.aurora span{position:absolute;display:block;border-radius:50%;filter:blur(90px);will-change:transform}
+.aurora span:nth-child(1){
+  width:min(58vw,900px);height:min(38vw,600px);left:-8%;top:-16%;
+  background:radial-gradient(circle at 50% 50%,rgba(91,140,255,.20),transparent 66%);
+  animation:drift1 78s ease-in-out infinite}
+.aurora span:nth-child(2){
+  width:min(52vw,820px);height:min(34vw,540px);right:-10%;top:-22%;
+  background:radial-gradient(circle at 50% 50%,rgba(169,129,247,.16),transparent 66%);
+  animation:drift2 94s ease-in-out infinite}
+@keyframes drift1{
+  0%,100%{transform:translate3d(0,0,0) scale(1)}
+  50%{transform:translate3d(7%,4%,0) scale(1.09)}}
+@keyframes drift2{
+  0%,100%{transform:translate3d(0,0,0) scale(1.04)}
+  50%{transform:translate3d(-6%,6%,0) scale(1)}}
+
+/* The Diagnostic Field — autonomous ambient instrument layer (js/field.js).
+   Nothing in it responds to the pointer. */
+#field{position:fixed;inset:0;width:100%;height:100%;max-width:100vw;
+  z-index:0;pointer-events:none;display:block;opacity:.9}
+
+button{font-family:inherit;cursor:pointer}
+input,select,textarea{font-family:inherit}
+a{color:var(--accent);text-decoration:none}
+a:hover{color:var(--accent-bright)}
+
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:var(--r-sm)}
+.skip-link{position:absolute;left:-9999px;top:0;background:var(--accent);color:#04212a;
+  padding:10px 18px;z-index:300;border-radius:0 0 var(--r-sm) 0;font-weight:600}
+.skip-link:focus{left:0}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;
+  clip:rect(0,0,0,0);white-space:nowrap;border:0}
+
+/* ---------------------------------------------------------------- shell -- */
+.topbar{
+  display:flex;align-items:center;padding:0;height:var(--shell-h);
+  border-bottom:1px solid var(--line);position:sticky;top:0;z-index:50;
+  background:rgba(10,12,16,.82);
+  backdrop-filter:blur(14px) saturate(140%);
+  -webkit-backdrop-filter:blur(14px) saturate(140%);
+}
+.brand{display:flex;align-items:center;gap:11px;margin-right:var(--s5);flex-shrink:0}
+.brand:hover{text-decoration:none}
+/* A deliberate 4px sits between the product name and its tagline: enough to
+   separate them, not enough to make the bar taller. */
+.brand-text{display:flex;flex-direction:column;gap:4px;line-height:1.12}
+.brand .mark{font-weight:650;font-size:15px;letter-spacing:.14em;color:var(--txt);text-transform:uppercase}
+.brand .sub{font-size:10px;color:var(--txt-3);letter-spacing:.045em;font-weight:450}
+
+.mainnav{display:flex;align-items:center;gap:2px;overflow-x:auto;scrollbar-width:none}
+.mainnav::-webkit-scrollbar{display:none}
+.navlink{
+  padding:7px 13px;border-radius:var(--r-sm);font-size:13px;color:var(--txt-2);
+  white-space:nowrap;border:1px solid transparent;font-weight:500;letter-spacing:.005em;
+  transition:color var(--dur) var(--ease),background var(--dur) var(--ease),border-color var(--dur) var(--ease);
+}
+.navlink:hover{color:var(--txt);background:var(--surface-2);text-decoration:none}
+.navlink[aria-current="page"]{
+  color:var(--accent-bright);background:var(--accent-soft);border-color:var(--accent-line);
+}
+.topbar .spacer{flex:1}
+
+/* ---------------------------------------------------------------- button -- */
+.btn{
+  background:var(--surface-2);border:1px solid var(--line);color:var(--txt);
+  padding:8px 15px;border-radius:var(--r-sm);font-size:13px;font-weight:500;
+  display:inline-flex;align-items:center;gap:7px;white-space:nowrap;position:relative;
+  transition:transform 160ms var(--ease),border-color var(--dur) var(--ease),
+             background var(--dur) var(--ease),color var(--dur) var(--ease);
+}
+.btn:hover{border-color:var(--accent-line);background:var(--surface-3);color:var(--txt);text-decoration:none;transform:translateY(-1px)}
+.btn:active{transform:translateY(0)}
+.btn:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.btn:disabled:hover{border-color:var(--line);background:var(--surface-2)}
+.btn.primary{
+  background:linear-gradient(115deg,#5B8CFF,#7C6BF5);border-color:#6E86FF;color:#F4F7FF;font-weight:600;
+  box-shadow:0 1px 0 rgba(255,255,255,.10) inset,0 4px 16px rgba(91,140,255,.22);
+}
+.btn.primary:hover{background:linear-gradient(115deg,#6E9BFF,#8C7DF7);border-color:#8AAEFF;
+  box-shadow:0 1px 0 rgba(255,255,255,.14) inset,0 6px 22px rgba(91,140,255,.34)}
+.btn.ghost{background:transparent;border-color:transparent;color:var(--txt-2)}
+.btn.ghost:hover{color:var(--txt);background:var(--surface-2);border-color:transparent}
+.btn.sm{padding:5px 11px;font-size:12px}
+.btn.danger:hover{border-color:var(--fail-line);color:var(--fail);background:var(--fail-soft)}
+.btn.danger-solid{background:var(--fail-soft);border-color:var(--fail-line);color:#FF8A85}
+.btn.danger-solid:hover{background:rgba(255,92,87,.22);border-color:var(--fail)}
+
+.layout{min-height:calc(100vh - var(--shell-h));position:relative;z-index:1}
+/* Editorial measure. 1680px let content strand itself on the left of a very
+   wide viewport; 1320 keeps the column deliberate and centred, and the roomier
+   gutter is what makes the page read as composed rather than merely contained.
+   The topbar uses the same measure so nav, hero and content share one edge. */
+.main{padding:var(--s5) 44px 64px;max-width:1320px;margin:0 auto}
+.topbar-inner{
+  width:100%;max-width:1320px;margin:0 auto;padding:0 44px;
+  display:flex;align-items:center;gap:var(--s2)}
+
+/* ------------------------------------------------------------ page head -- */
+.crumb{margin-bottom:var(--s3);font-size:12px;letter-spacing:.01em}
+.crumb a{color:var(--txt-3)}
+.crumb a:hover{color:var(--accent)}
+
+.page-head{display:flex;align-items:flex-start;justify-content:space-between;
+  gap:var(--s4);margin-bottom:var(--s5);flex-wrap:wrap}
+.eyebrow{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.2em;text-transform:uppercase;
+  color:var(--accent);display:flex;align-items:center;gap:8px;margin-bottom:7px;font-weight:500;
+}
+.eyebrow::before{content:'';width:16px;height:1px;background:var(--accent);opacity:.6}
+.page-head h1{font-size:25px;font-weight:640;letter-spacing:-.021em;line-height:1.15;
+  display:flex;align-items:center;gap:11px;flex-wrap:wrap}
+.page-head .meta{color:var(--txt-2);font-size:13px;margin-top:9px;
+  display:flex;gap:7px 18px;flex-wrap:wrap;align-items:center}
+.page-head .meta b{color:var(--txt);font-weight:550}
+.page-head .actions{display:flex;gap:var(--s2);flex-wrap:wrap;align-items:flex-start}
+
+/* --------------------------------------------------------- brand banner -- */
+/* Dashboard-only identity band: FOCUS -> INSPECT -> DIAGNOSE. */
+.hero{
+  position:relative;overflow:hidden;border:1px solid var(--line);border-radius:var(--r);
+  background:linear-gradient(140deg,var(--surface) 0%,#10161F 55%,#0E1620 100%);
+  padding:34px 38px;margin-bottom:var(--s5);
+}
+.hero::before{
+  content:'';position:absolute;inset:0;pointer-events:none;
+  background:
+    radial-gradient(640px 230px at 90% -32%,rgba(169,129,247,.16),transparent 70%),
+    radial-gradient(520px 200px at 8% -20%,rgba(91,140,255,.14),transparent 72%);
+}
+.hero::after{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:2px;
+  background:linear-gradient(180deg,transparent,var(--accent) 22%,var(--indigo) 55%,var(--violet) 80%,transparent);
+  opacity:.85;
+}
+.hero h1{background:linear-gradient(96deg,#FFFFFF 0%,#DCE4FF 42%,#C3B6FF 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.hero-inner{position:relative;display:flex;justify-content:space-between;gap:var(--s5);flex-wrap:wrap;align-items:center}
+.hero h1{font-size:28px;font-weight:680;letter-spacing:-.028em;line-height:1.1}
+.hero .tagline{color:var(--txt-2);font-size:14px;margin-top:6px;letter-spacing:.004em}
+.pipeline{display:flex;align-items:center;gap:10px;font-family:var(--mono);
+  font-size:10.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--txt-3);margin-top:16px}
+.pipeline span{display:flex;align-items:center;gap:8px}
+.pipeline i{width:5px;height:5px;border-radius:50%;background:var(--accent);opacity:.5;font-style:normal}
+.pipeline .sep{color:var(--line);font-size:11px}
+.pipeline span.on{color:var(--accent)}
+.pipeline span.on i{opacity:1;box-shadow:0 0 8px var(--accent-glow)}
+
+/* --------------------------------------------------------------- panels -- */
+.section{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  padding:22px 30px 26px;margin-bottom:var(--s5);position:relative;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.028);
+}
+.section h3{
+  font-size:12px;font-weight:600;margin-bottom:var(--s4);display:flex;align-items:center;
+  justify-content:space-between;gap:var(--s3);flex-wrap:wrap;
+  letter-spacing:.11em;text-transform:uppercase;color:var(--txt-2);
+}
+.section h3 .hint{font-size:11.5px;color:var(--txt-3);font-weight:400;letter-spacing:.02em;text-transform:none}
+.section h3 .h3-actions{display:flex;gap:var(--s2)}
+.infostrip{font-size:12px;color:var(--txt-3);display:flex;gap:8px 26px;flex-wrap:wrap;font-family:var(--mono)}
+.infostrip b{color:var(--txt-2);font-weight:500}
+
+/* ----------------------------------------------------------- stat cards -- */
+.stat-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));
+  gap:var(--s3);margin-bottom:var(--s5)}
+/* Read-only telemetry: no hover response — these are not interactive. */
+.stat{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  padding:15px 17px;position:relative;overflow:hidden;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.028);
+}
+.stat::after{content:'';position:absolute;left:0;right:0;top:0;height:1px;
+  background:var(--brand-grad);opacity:.42}
+.stat-label{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.16em;
+  color:var(--txt-3);font-weight:500}
+.stat-value{font-family:var(--mono);font-size:31px;font-weight:600;color:var(--txt);
+  margin:8px 0 3px;font-variant-numeric:tabular-nums;line-height:1;letter-spacing:-.02em}
+.stat-sub{font-size:11.5px;color:var(--txt-3)}
+.stat.warnish .stat-value{color:var(--warn)}
+.stat.accent .stat-value{color:var(--accent)}
+
+/* --------------------------------------------------------- verdict rail -- */
+/* PASS / WARN / FAIL / INVALID distribution across the cohort. */
+.dist-rail{display:grid;grid-template-columns:repeat(auto-fit,minmax(132px,1fr));gap:var(--s3)}
+.dist-cell{border:1px solid var(--line);border-radius:var(--r-sm);padding:12px 14px;
+  background:var(--surface-2);position:relative;overflow:hidden}
+.dist-cell .k{font-family:var(--mono);font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:var(--txt-3)}
+.dist-cell .v{font-family:var(--mono);font-size:23px;font-weight:600;margin-top:5px;
+  font-variant-numeric:tabular-nums;line-height:1}
+.dist-cell .p{font-size:11px;color:var(--txt-3);margin-top:2px}
+.dist-cell::before{content:'';position:absolute;left:0;top:0;bottom:0;width:2px}
+.dist-cell.pass::before{background:var(--pass)} .dist-cell.pass .v{color:var(--pass)}
+.dist-cell.warn::before{background:var(--warn)} .dist-cell.warn .v{color:var(--warn)}
+.dist-cell.fail::before{background:var(--fail)} .dist-cell.fail .v{color:var(--fail)}
+.dist-cell.invalid::before{background:var(--txt-3)} .dist-cell.invalid .v{color:var(--txt-2)}
+
+.dist-bar{display:flex;height:6px;border-radius:3px;overflow:hidden;background:var(--surface-3);margin-top:var(--s4)}
+.dist-bar span{display:block;height:100%;transition:width 700ms var(--ease)}
+.dist-bar .seg-pass{background:var(--pass)}
+.dist-bar .seg-warn{background:var(--warn)}
+.dist-bar .seg-fail{background:var(--fail)}
+.dist-bar .seg-invalid{background:var(--txt-3);opacity:.55}
+
+/* --------------------------------------------------------------- badges -- */
+.pill{font-family:var(--mono);font-size:10px;font-weight:600;padding:3px 9px;border-radius:5px;
+  text-transform:uppercase;letter-spacing:.1em;white-space:nowrap;display:inline-block;border:1px solid}
+.pill.pass{background:var(--pass-soft);color:var(--pass);border-color:var(--pass-line)}
+.pill.warn{background:var(--warn-soft);color:var(--warn);border-color:var(--warn-line)}
+.pill.fail{background:var(--fail-soft);color:var(--fail);border-color:var(--fail-line)}
+.pill.invalid{background:var(--surface-3);color:var(--txt-2);border-color:var(--line)}
+.pill.none{background:var(--surface-2);color:var(--txt-3);border-color:var(--line-soft)}
+.pill.vr{background:rgba(91,140,255,.11);color:var(--accent-bright);border-color:var(--accent-line)}
+.pill.ar{background:rgba(169,129,247,.12);color:#BFA1FB;border-color:rgba(169,129,247,.34)}
+.pill.archived{background:var(--surface-2);color:var(--txt-3);border-color:var(--line)}
+
+/* live status dot for the topbar / recent activity */
+.livedot{width:6px;height:6px;border-radius:50%;background:var(--pass);display:inline-block;
+  box-shadow:0 0 0 0 rgba(63,208,122,.5);animation:pulseDot 2.6s var(--ease) infinite}
+@keyframes pulseDot{0%{box-shadow:0 0 0 0 rgba(63,208,122,.45)}70%{box-shadow:0 0 0 6px rgba(63,208,122,0)}100%{box-shadow:0 0 0 0 rgba(63,208,122,0)}}
+
+.grade{display:inline-flex;align-items:center;justify-content:center;font-family:var(--mono);
+  font-weight:700;font-size:12px;line-height:1;min-width:23px;height:23px;padding:0 7px;
+  border-radius:6px;border:1px solid currentColor;letter-spacing:.02em;vertical-align:middle}
+.grade.g-a{color:var(--pass);background:var(--pass-soft)}
+.grade.g-b{color:var(--accent);background:var(--accent-soft)}
+.grade.g-c{color:var(--warn);background:var(--warn-soft)}
+.grade.g-d{color:#F59E5B;background:rgba(245,158,91,.12)}
+.grade.g-f{color:var(--fail);background:var(--fail-soft)}
+.grade-lg{font-size:19px;min-width:40px;height:40px;border-radius:9px;padding:0 12px;border-width:1.5px}
+
+/* -------------------------------------------------------- verdict panel -- */
+/* Signature element of the report: focus brackets + score ring. */
+.verdict{
+  display:flex;align-items:center;gap:26px;padding:22px 24px;border-radius:var(--r);
+  border:1px solid var(--line);background:var(--surface);margin-bottom:var(--s5);
+  flex-wrap:wrap;position:relative;overflow:hidden;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.03);
+}
+.verdict::before{content:'';position:absolute;inset:0;pointer-events:none;
+  background:
+    radial-gradient(540px 190px at 10% -40%,rgba(91,140,255,.13),transparent 70%),
+    radial-gradient(460px 170px at 62% -50%,rgba(169,129,247,.09),transparent 72%)}
+.verdict.pass{border-left:3px solid var(--pass)}
+.verdict.warn{border-left:3px solid var(--warn)}
+.verdict.fail{border-left:3px solid var(--fail)}
+.verdict.invalid{border-left:3px solid var(--txt-3)}
+.verdict .v-main{display:flex;align-items:center;gap:20px;position:relative}
+.v-label{font-family:var(--mono);font-size:10px;text-transform:uppercase;letter-spacing:.19em;
+  color:var(--txt-3);display:block;margin-bottom:6px}
+.v-status{font-size:27px;font-weight:680;letter-spacing:-.015em;line-height:1.05;font-family:var(--sans)}
+.verdict.pass .v-status{color:var(--pass)}
+.verdict.warn .v-status{color:var(--warn)}
+.verdict.fail .v-status{color:var(--fail)}
+.verdict.invalid .v-status{color:var(--txt-2)}
+.verdict .v-sep{width:1px;align-self:stretch;background:var(--line);margin:2px 0}
+.verdict .v-note{font-size:12.5px;color:var(--txt-2);flex:1;min-width:230px;line-height:1.6;position:relative}
+.verdict .v-note b{color:var(--txt);font-weight:600}
+
+/* camera-focus brackets — the "inspection" metaphor, used sparingly */
+.focus-frame{position:relative}
+.focus-frame::before,.focus-frame::after{
+  content:'';position:absolute;width:13px;height:13px;border:1.5px solid var(--accent);opacity:.55;pointer-events:none}
+.focus-frame::before{left:-8px;top:-8px;border-right:0;border-bottom:0;border-radius:3px 0 0 0}
+.focus-frame::after{right:-8px;bottom:-8px;border-left:0;border-top:0;border-radius:0 0 3px 0}
+
+/* score ring */
+.score-ring{position:relative;width:104px;height:104px;flex-shrink:0}
+.score-ring svg{width:100%;height:100%;transform:rotate(-90deg);display:block}
+.score-ring .track{fill:none;stroke:var(--surface-3);stroke-width:7}
+.score-ring .prog{fill:none;stroke-width:7;stroke-linecap:round;
+  transition:stroke-dashoffset 1000ms var(--ease)}
+/* The arc itself carries the brand spectrum; the verdict is stated by the
+   status word, the grade badge and the tinted halo — never by the arc alone. */
+.score-ring .prog{stroke:url(#ringGrad)}
+.score-ring::after{content:'';position:absolute;inset:-6px;border-radius:50%;pointer-events:none;
+  background:radial-gradient(circle,transparent 58%,var(--ring-halo,transparent) 100%);opacity:.5}
+.score-ring.pass{--ring-halo:rgba(63,208,122,.16)}
+.score-ring.warn{--ring-halo:rgba(232,179,74,.16)}
+.score-ring.fail{--ring-halo:rgba(255,92,87,.16)}
+.score-ring .rv{position:absolute;inset:0;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:1px}
+.score-ring .rv b{font-family:var(--mono);font-size:27px;font-weight:600;line-height:1;
+  font-variant-numeric:tabular-nums;color:var(--txt)}
+.score-ring .rv small{font-family:var(--mono);font-size:9px;letter-spacing:.16em;color:var(--txt-3);text-transform:uppercase}
+
+/* ---------------------------------------------------------- metric tile -- */
+.grid-metrics{display:grid;grid-template-columns:repeat(auto-fit,minmax(164px,1fr));
+  gap:var(--s3);margin-bottom:var(--s5)}
+/* Read-only telemetry: stable, no hover response. */
+.metric{
+  background:var(--surface);border:1px solid var(--line);border-radius:var(--r);
+  padding:14px 16px 15px;position:relative;overflow:hidden;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.025);
+}
+.metric .label{font-family:var(--mono);font-size:9.5px;color:var(--txt-3);text-transform:uppercase;
+  letter-spacing:.16em;font-weight:500}
+.metric .val{font-size:26px;font-weight:600;font-family:var(--mono);letter-spacing:-.022em;
+  margin-top:7px;font-variant-numeric:tabular-nums;line-height:1.12;color:var(--txt)}
+.metric .unit{font-size:12px;color:var(--txt-3);font-weight:400;letter-spacing:0}
+.metric .judge{font-family:var(--mono);font-size:10px;margin-top:6px;font-weight:600;
+  letter-spacing:.09em;text-transform:uppercase}
+.metric .bar{position:absolute;left:0;bottom:0;height:2px;width:100%}
+.metric.pass .judge{color:var(--pass)} .metric.pass .bar{background:var(--pass)}
+.metric.warn .judge{color:var(--warn)} .metric.warn .bar{background:var(--warn)}
+.metric.fail .judge{color:var(--fail)} .metric.fail .bar{background:var(--fail)}
+.metric.neutral .judge{color:var(--txt-3)} .metric.neutral .bar{background:var(--line)}
+.metric.info{background:var(--surface-2)}
+.metric.info .val{font-size:20px;color:var(--txt-2)}
+
+/* --------------------------------------------------------------- charts -- */
+.chartwrap{position:relative;height:250px}
+.chart-empty{height:250px;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  gap:7px;color:var(--txt-3);font-size:12.5px;border:1px dashed var(--line);border-radius:var(--r-sm);
+  background:var(--surface-2)}
+
+/* ------------------------------------------------------------ checklist -- */
+/* Numbered validation sequence 01..08. */
+.check-row{display:flex;align-items:center;gap:var(--s3);padding:11px 0;
+  border-bottom:1px solid var(--line-soft);flex-wrap:wrap}
+.check-row:last-child{border-bottom:none}
+.check-idx{font-family:var(--mono);font-size:11px;color:var(--txt-3);width:24px;flex-shrink:0;
+  letter-spacing:.05em;font-weight:500}
+.check-row.done .check-idx{color:var(--accent)}
+.check-row .ctext{flex:1;font-size:13.5px;min-width:190px;font-weight:500;color:var(--txt)}
+.check-row .ctext small{display:block;color:var(--txt-3);font-size:11.5px;font-weight:400;margin-top:1px}
+.check-state{font-family:var(--mono);font-size:10px;font-weight:600;text-transform:uppercase;
+  letter-spacing:.11em;color:var(--txt-3);min-width:104px;text-align:right}
+.check-state.pass{color:var(--pass)} .check-state.warn{color:var(--warn)} .check-state.fail{color:var(--fail)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:var(--r-sm);overflow:hidden;background:var(--surface-2)}
+.seg button{background:transparent;border:none;color:var(--txt-3);padding:6px 13px;font-size:11.5px;
+  font-weight:600;font-family:var(--mono);letter-spacing:.07em;text-transform:uppercase;
+  transition:background 160ms var(--ease),color 160ms var(--ease)}
+.seg button.on.pass{background:var(--pass-soft);color:var(--pass)}
+.seg button.on.warn{background:var(--warn-soft);color:var(--warn)}
+.seg button.on.fail{background:var(--fail-soft);color:var(--fail)}
+.seg button:hover:not(.on){color:var(--txt);background:var(--surface-3)}
+.seg button:focus-visible{outline-offset:-2px}
+
+/* ------------------------------------------------------- defect / incident */
+.bug{display:grid;grid-template-columns:auto 1fr auto auto;gap:var(--s3);align-items:start;
+  padding:13px 0;border-bottom:1px solid var(--line-soft)}
+.bug:last-child{border-bottom:none}
+.sev{font-family:var(--mono);font-size:9.5px;font-weight:700;padding:3px 8px;border-radius:5px;
+  text-transform:uppercase;letter-spacing:.1em;white-space:nowrap;margin-top:2px;border:1px solid}
+.sev.critical{background:var(--fail-soft);color:var(--fail);border-color:var(--fail-line)}
+.sev.high{background:var(--warn-soft);color:var(--warn);border-color:var(--warn-line)}
+.sev.medium{background:var(--surface-3);color:var(--txt-2);border-color:var(--line)}
+.sev.low{background:var(--surface-2);color:var(--txt-3);border-color:var(--line-soft)}
+.bug .btext{font-size:13px;display:flex;flex-direction:column;gap:3px;min-width:0}
+.bug .btext b{font-weight:550;color:var(--txt);word-break:break-word}
+.bug .btext small{font-size:11.5px;color:var(--txt-3);word-break:break-word;line-height:1.5}
+.bug .btext small.res{color:var(--pass)}
+.bug-actions{display:flex;gap:6px;align-items:center}
+select.bug-status{padding:5px 9px;border-radius:6px;font-size:11px;background:var(--surface-2);
+  border:1px solid var(--line);color:var(--txt-2);font-family:var(--mono);letter-spacing:.05em}
+select.bug-status.open{color:var(--warn);border-color:var(--warn-line)}
+select.bug-status.in_progress{color:var(--accent);border-color:var(--accent-line)}
+select.bug-status.resolved{color:var(--pass);border-color:var(--pass-line)}
+select.bug-status.closed{color:var(--txt-3)}
+
+/* --------------------------------------------------------------- tables -- */
+.ctable-wrap{overflow-x:auto;border-radius:var(--r-sm);position:relative}
+.ctable{width:100%;border-collapse:collapse;font-size:13px}
+.ctable th{text-align:left;font-family:var(--mono);font-size:9.5px;text-transform:uppercase;
+  letter-spacing:.15em;color:var(--txt-3);font-weight:500;border-bottom:1px solid var(--line);
+  white-space:nowrap;padding:0;background:var(--surface)}
+.ctable th.num{text-align:right}
+.ctable th .sortbtn{background:none;border:none;color:inherit;font:inherit;text-transform:inherit;
+  letter-spacing:inherit;padding:10px 12px;width:100%;text-align:inherit;display:block;
+  transition:color 160ms var(--ease)}
+.ctable th.num .sortbtn{text-align:right}
+.ctable th .sortbtn:hover{color:var(--txt-2)}
+.ctable th.sorted .sortbtn{color:var(--accent)}
+.ctable th .arr{font-size:8px;margin-left:5px;color:var(--accent)}
+.ctable td{padding:11px 12px;border-bottom:1px solid var(--line-soft);white-space:nowrap;vertical-align:middle;color:var(--txt-2)}
+.ctable td.wrap{white-space:normal;min-width:230px}
+.ctable tbody tr:last-child td{border-bottom:none}
+/* ---- focus acquisition -------------------------------------------------
+   Hovering a list of clickable objects sharpens the target and quietly
+   de-emphasises its neighbours, like focusing a precision instrument.
+   Opacity only — text is never blurred and stays legible throughout. */
+.ctable tbody tr.clickable{cursor:pointer;
+  transition:background 200ms var(--ease),opacity 200ms var(--ease)}
+.ctable tbody:hover tr.clickable:not(:hover){opacity:.52}
+.ctable tbody tr.clickable:hover{background:var(--surface-2);opacity:1}
+.ctable tbody tr.clickable:hover .cell-strong{color:var(--accent-bright)}
+.ctable tbody tr.clickable:hover td:first-child{box-shadow:inset 2px 0 0 var(--accent)}
+.ctable tbody tr.clickable:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;
+  background:var(--surface-2);opacity:1}
+.ctable .num{font-family:var(--mono);text-align:right;font-variant-numeric:tabular-nums;color:var(--txt)}
+tr.row-archived td{opacity:.5}
+.cell-strong{font-weight:550;color:var(--txt);transition:color 160ms var(--ease)}
+
+/* -------------------------------------------------------------- toolbar -- */
+.toolbar{display:flex;gap:var(--s3);align-items:flex-end;margin-bottom:var(--s4);flex-wrap:wrap}
+.toolbar .grow{flex:1;min-width:180px}
+.field-inline{display:flex;flex-direction:column;gap:5px}
+.field-inline label{font-family:var(--mono);font-size:9.5px;text-transform:uppercase;
+  letter-spacing:.15em;color:var(--txt-3);font-weight:500}
+.search,.selectbox{background:var(--bg-deep);border:1px solid var(--line);color:var(--txt);
+  padding:8px 12px;border-radius:var(--r-sm);font-size:13px;
+  transition:border-color var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+.search{width:100%}
+.search:focus,.selectbox:focus{outline:none;border-color:var(--accent);box-shadow:0 0 0 3px var(--accent-soft)}
+.search::placeholder{color:var(--txt-3)}
+.chk{display:inline-flex;align-items:center;gap:8px;font-size:12.5px;color:var(--txt-2);
+  cursor:pointer;user-select:none;padding-bottom:8px}
+.chk input{accent-color:var(--accent);width:15px;height:15px}
+
+/* ---------------------------------------------------------- entity chip -- */
+.chip-row{display:flex;flex-wrap:wrap;gap:var(--s3)}
+.entity-chip{display:flex;flex-direction:column;gap:3px;padding:12px 15px;border:1px solid var(--line);
+  border-radius:var(--r-sm);background:var(--surface-2);min-width:168px;
+  transition:border-color var(--dur) var(--ease),background var(--dur) var(--ease),
+             opacity 200ms var(--ease),box-shadow var(--dur) var(--ease)}
+.chip-row:hover .entity-chip:not(:hover){opacity:.55}
+.entity-chip:hover{border-color:var(--accent-line);background:var(--surface-3);
+  text-decoration:none;opacity:1;box-shadow:0 0 0 1px var(--accent-soft),0 6px 20px rgba(0,0,0,.34)}
+.entity-chip b{font-size:13px;color:var(--txt);font-weight:550}
+.entity-chip .muted{font-size:11px;font-family:var(--mono);letter-spacing:.02em}
+
+/* --------------------------------------------------------------- states -- */
+.state{text-align:center;padding:48px 20px;color:var(--txt-3)}
+.state .state-icon{margin:0 auto 14px;width:34px;height:34px;opacity:.45;color:var(--txt-2)}
+.state .state-icon svg{width:100%;height:100%;display:block}
+.state .state-title{font-size:15px;color:var(--txt-2);font-weight:550;margin-bottom:7px}
+.state .state-msg{font-size:12.5px;max-width:460px;margin:0 auto;line-height:1.65}
+.state .state-actions{margin-top:20px;display:flex;gap:var(--s2);justify-content:center;flex-wrap:wrap}
+.state.error .state-title{color:var(--fail)}
+.state.ok .state-icon{color:var(--pass);opacity:1}
+
+.skeleton{background:linear-gradient(90deg,var(--surface-2) 25%,#1F2531 37%,var(--surface-2) 63%);
+  background-size:400% 100%;animation:shimmer 1.4s ease infinite;border-radius:6px;height:13px;margin:11px 0}
+@keyframes shimmer{0%{background-position:100% 50%}100%{background-position:0 50%}}
+.skeleton.tall{height:78px;margin:0}
+.skeleton-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(178px,1fr));gap:var(--s3);margin-bottom:var(--s5)}
+
+/* --------------------------------------------------------------- import -- */
+.dropzone{border:1.5px dashed var(--line);border-radius:var(--r);padding:46px 20px;text-align:center;
+  background:var(--surface-2);position:relative;overflow:hidden;
+  transition:border-color var(--dur) var(--ease),background var(--dur) var(--ease)}
+.dropzone::before{content:'';position:absolute;inset:0;pointer-events:none;
+  background:radial-gradient(440px 170px at 50% -20%,rgba(124,107,245,.12),transparent 70%)}
+.dropzone.over{border-color:var(--accent);background:rgba(91,140,255,.06)}
+.dropzone.over .dz-icon{color:var(--accent);transform:translateY(-2px)}
+.dz-icon{width:38px;height:38px;margin:0 auto 14px;color:var(--txt-3);position:relative;
+  transition:color var(--dur) var(--ease),transform var(--dur) var(--ease)}
+.dz-icon svg{width:100%;height:100%;display:block}
+.dropzone p{position:relative}
+.import-summary{display:flex;gap:var(--s2);flex-wrap:wrap;margin-bottom:var(--s2)}
+.chip{display:inline-flex;align-items:center;gap:6px;padding:5px 12px;border-radius:6px;
+  font-family:var(--mono);font-size:11px;font-weight:600;border:1px solid;letter-spacing:.06em}
+.chip.ok{color:var(--pass);border-color:var(--pass-line);background:var(--pass-soft)}
+.chip.dup{color:var(--warn);border-color:var(--warn-line);background:var(--warn-soft)}
+.chip.bad{color:var(--fail);border-color:var(--fail-line);background:var(--fail-soft)}
+.chip.new{color:var(--accent);border-color:var(--accent-line);background:var(--accent-soft);
+  font-size:9px;padding:2px 7px}
+.reason{font-size:12px;color:var(--txt-2);line-height:1.55}
+.reason .code{font-family:var(--mono);font-size:9.5px;color:var(--txt-3);display:block;
+  margin-top:3px;letter-spacing:.09em}
+.warn-text{color:var(--warn);font-size:11.5px}
+
+/* ---------------------------------------------------------------- modal -- */
+.overlay{position:fixed;inset:0;background:rgba(5,7,11,.76);display:none;align-items:center;
+  justify-content:center;z-index:100;padding:20px;backdrop-filter:blur(5px)}
+.overlay.show{display:flex;animation:overlayIn 200ms var(--ease)}
+@keyframes overlayIn{from{opacity:0}to{opacity:1}}
+.modal{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:24px;
+  width:100%;max-width:470px;max-height:90vh;display:flex;flex-direction:column;
+  box-shadow:0 24px 70px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.045);
+  animation:modalIn 260ms var(--ease)}
+@keyframes modalIn{from{opacity:0;transform:translateY(10px) scale(.985)}to{opacity:1;transform:none}}
+.modal h3{font-size:16px;font-weight:620;margin-bottom:var(--s4);letter-spacing:-.01em}
+.modal-wide{max-width:860px}
+.modal-body{overflow:auto;flex:1;min-height:0}
+.field{margin-bottom:var(--s4)}
+.field label{display:block;font-size:12px;color:var(--txt-2);margin-bottom:6px;font-weight:500}
+.field input,.field select,.field textarea{width:100%;background:var(--bg-deep);border:1px solid var(--line);
+  color:var(--txt);padding:9px 12px;border-radius:var(--r-sm);font-size:13.5px;
+  transition:border-color var(--dur) var(--ease),box-shadow var(--dur) var(--ease)}
+.field textarea{resize:vertical;font-size:13px;line-height:1.55}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--accent);
+  box-shadow:0 0 0 3px var(--accent-soft)}
+.field input[aria-invalid="true"]{border-color:var(--fail)}
+.field-error{color:var(--fail);font-size:11.5px;margin-top:5px;display:none}
+.field-error.show{display:block}
+.modal-actions{display:flex;gap:var(--s3);justify-content:flex-end;margin-top:var(--s5);flex-wrap:wrap}
+.danger-intro{font-size:13px;color:var(--txt-2);margin-bottom:var(--s3);line-height:1.6}
+.danger-list{margin:var(--s2) 0 0;list-style:none;font-size:12.5px;color:var(--txt-2)}
+.danger-list li{padding:7px 0;border-bottom:1px solid var(--line-soft);display:flex;
+  justify-content:space-between;gap:var(--s4)}
+.danger-list li:last-child{border-bottom:none}
+.danger-list b{color:var(--txt);font-family:var(--mono);font-variant-numeric:tabular-nums}
+.choice{border:1px solid var(--line);border-radius:var(--r-sm);padding:14px 16px;margin-bottom:var(--s3);
+  display:flex;flex-direction:column;gap:5px;background:var(--surface-2)}
+.choice b{font-size:13px}
+.choice .muted{font-size:12px;line-height:1.55}
+.choice.danger{border-color:var(--fail-line)}
+.rawjson{background:var(--bg-deep);border:1px solid var(--line);border-radius:var(--r-sm);padding:15px;
+  font-family:var(--mono);font-size:11px;line-height:1.6;color:var(--txt-2);overflow:auto;
+  max-height:52vh;white-space:pre}
+
+/* ---------------------------------------------------------------- toast -- */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(8px);
+  background:var(--surface-2);border:1px solid var(--line);padding:11px 20px;border-radius:var(--r-sm);
+  font-size:13px;opacity:0;transition:opacity 220ms var(--ease),transform 220ms var(--ease);
+  z-index:200;pointer-events:none;max-width:90vw;text-align:center;
+  box-shadow:0 12px 34px rgba(0,0,0,.5)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+.toast.error{border-color:var(--fail-line);color:#FF8A85}
+.toast.success{border-color:var(--pass-line);color:#7BE3A4}
+
+.muted{color:var(--txt-3)}
+code{font-family:var(--mono);font-size:11.5px;background:var(--bg-deep);padding:2px 6px;
+  border-radius:4px;color:var(--accent);border:1px solid var(--line-soft)}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:9px 22px;font-size:12.5px}
+.kv dt{color:var(--txt-3)}
+.kv dd{color:var(--txt-2);font-family:var(--mono);font-size:11.5px;word-break:break-all}
+
+/* ------------------------------------------------------------- motion --- */
+/* Entrance choreography. Applied by js/motion.js, which no-ops entirely when
+   the user prefers reduced motion. */
+.rise{opacity:0;transform:translateY(10px)}
+.rise.in{opacity:1;transform:none;
+  transition:opacity 420ms var(--ease),transform 420ms var(--ease)}
+.page-enter{animation:pageIn 300ms var(--ease)}
+@keyframes pageIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+/* Focus acquisition: entering a single object (project / student / session)
+   settles as though the instrument has locked onto it. Fast — 340ms — and
+   transform/opacity only. */
+.focus-acquire{animation:focusIn 340ms var(--ease)}
+@keyframes focusIn{
+  0%{opacity:0;transform:scale(.985)}
+  60%{opacity:1}
+  100%{opacity:1;transform:none}}
+.focus-acquire .verdict,.focus-acquire .page-head{animation:lockIn 460ms var(--ease)}
+@keyframes lockIn{
+  0%{clip-path:inset(0 0 0 0);opacity:.35}
+  100%{clip-path:inset(0 0 0 0);opacity:1}}
+
+@media (prefers-reduced-motion:reduce){
+  html{scroll-behavior:auto}
+  *,*::before,*::after{
+    animation-duration:.001ms !important;animation-iteration-count:1 !important;
+    transition-duration:.001ms !important;scroll-behavior:auto !important}
+  .rise{opacity:1;transform:none}
+  .livedot{animation:none}
+  .aurora{display:none}            /* no ambient drift */
+  #field{display:none}             /* The Field is not rendered at all */
+  .btn:hover{transform:none}
+  /* Keep the interface completely stable: no focus-acquisition dimming. */
+  .ctable tbody:hover tr.clickable:not(:hover),
+  .chip-row:hover .entity-chip:not(:hover){opacity:1}
+}
+/* Touch devices get no hover de-emphasis. The diagnostic field is autonomous,
+   so it still runs here — at reduced density, see js/field.js. */
+@media (hover:none),(pointer:coarse){
+  .ctable tbody:hover tr.clickable:not(:hover),
+  .chip-row:hover .entity-chip:not(:hover){opacity:1}
+}
+
+/* ----------------------------------------------------------- responsive -- */
+/* Gutters step down with the viewport; .main and .topbar-inner always move
+   together so the nav never drifts off the content edge. */
+@media (max-width:1400px){
+  .main{padding:var(--s5) 32px 60px}
+  .topbar-inner{padding:0 32px}
+}
+@media (max-width:1024px){
+  .main{padding:20px 24px 52px}
+  .topbar-inner{padding:0 24px}
+  .section{padding:20px 22px 24px}
+  .hero{padding:26px 26px}
+}
+@media (max-width:1100px){
+  .brand .sub{display:none}
+  .hero h1{font-size:24px}
+}
+@media (max-width:860px){
+  .topbar-inner{padding:0 14px;gap:6px}
+  .brand{margin-right:var(--s3)}
+  .navlink{padding:6px 10px;font-size:12.5px}
+  .main{padding:16px 16px 44px}
+  .section{padding:18px 17px 20px}
+  .unity-cta{padding:18px 18px}
+  .page-head{flex-direction:column;align-items:stretch}
+  .page-head h1{font-size:20px}
+  .hero{padding:20px}
+  .hero h1{font-size:21px}
+  .hero-inner{flex-direction:column;align-items:flex-start;gap:var(--s4)}
+  .stat-grid{grid-template-columns:repeat(auto-fit,minmax(142px,1fr))}
+  .stat-value{font-size:25px}
+  .grid-metrics{grid-template-columns:repeat(auto-fit,minmax(138px,1fr))}
+  .metric .val{font-size:21px}
+  .verdict{gap:var(--s4);padding:18px}
+  .verdict .v-sep{display:none}
+  .score-ring{width:88px;height:88px}
+  .score-ring .rv b{font-size:23px}
+  .bug{grid-template-columns:auto 1fr;gap:var(--s2)}
+  .bug-actions{grid-column:1/-1;justify-content:flex-end}
+  .check-row{align-items:flex-start}
+  .check-state{text-align:left;min-width:0}
+  .chartwrap,.chart-empty{height:210px}
+  .modal{padding:18px}
+}
+@media (max-width:540px){
+  .toolbar{flex-direction:column;align-items:stretch}
+  .toolbar .field-inline{width:100%}
+  .selectbox{width:100%}
+  .verdict .v-main{gap:var(--s4)}
+}
+
+/* =============================================================================
+   XR TEST LAB v2 — analysis surfaces
+
+   XR Health, Fix First, XR Doctor, evaluation areas, comparison, retention and
+   the hosted landing page. Same obsidian / blue-indigo-violet system: verdict
+   hues stay reserved for condition, brand hues for identity and score.
+   ============================================================================= */
+
+/* ---- condition colour, shared by XR Health and XR Doctor ---------------- */
+.health-row,.doc-row{--cond:var(--txt-3);--cond-soft:rgba(124,134,160,.10);--cond-line:rgba(124,134,160,.26)}
+.health-row.healthy,.doc-row.healthy{--cond:var(--pass);--cond-soft:var(--pass-soft);--cond-line:var(--pass-line)}
+.health-row.attention,.doc-row.attention{--cond:var(--warn);--cond-soft:var(--warn-soft);--cond-line:var(--warn-line)}
+.health-row.critical,.doc-row.critical{--cond:var(--fail);--cond-soft:var(--fail-soft);--cond-line:var(--fail-line)}
+
+/* ---- XR Health ----------------------------------------------------------- */
+.health-grid{display:grid;gap:var(--s2)}
+.health-row{
+  display:grid;grid-template-columns:180px 158px 1fr;align-items:center;gap:var(--s3);
+  padding:12px 14px;border:1px solid var(--line);border-radius:var(--r-sm);
+  background:var(--surface-2);border-left:3px solid var(--cond)}
+.health-row.overall{
+  background:linear-gradient(90deg,var(--cond-soft),transparent 62%);border-color:var(--cond-line)}
+.health-row .h-label{font-weight:640;font-size:13.5px;letter-spacing:.01em}
+.health-row .h-state{
+  display:inline-flex;align-items:center;gap:7px;color:var(--cond);
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase}
+.health-row .dot,.doc-row .dot{width:7px;height:7px;border-radius:50%;background:var(--cond);flex:none}
+.health-row .h-detail{color:var(--txt-2);font-size:12.8px;line-height:1.5}
+
+/* ---- Fix First ----------------------------------------------------------- */
+.fixfirst{
+  border:1px solid var(--line);border-radius:var(--r);padding:18px 20px;
+  background:var(--surface-2);position:relative;overflow:hidden}
+.fixfirst::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--txt-3)}
+.fixfirst.critical::before{background:var(--fail)}
+.fixfirst.attention::before{background:var(--warn)}
+.fixfirst.clear::before{background:var(--pass)}
+.fixfirst.critical{background:linear-gradient(100deg,var(--fail-soft),transparent 54%)}
+.fixfirst.attention{background:linear-gradient(100deg,var(--warn-soft),transparent 54%)}
+.fixfirst.clear{background:linear-gradient(100deg,var(--pass-soft),transparent 54%)}
+.ff-head{display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap;margin-bottom:14px}
+.ff-tag{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+  padding:4px 9px;border-radius:999px;border:1px solid var(--line);
+  color:var(--txt-2);background:var(--surface-3)}
+.fixfirst.critical .ff-tag{color:var(--fail);border-color:var(--fail-line)}
+.fixfirst.attention .ff-tag{color:var(--warn);border-color:var(--warn-line)}
+.fixfirst.clear .ff-tag{color:var(--pass);border-color:var(--pass-line)}
+.ff-title{font-size:19px;font-weight:660;letter-spacing:-.01em}
+.ff-block{margin-top:12px}
+.ff-label{
+  font-family:var(--mono);font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--txt-3);margin-bottom:6px}
+.ff-evidence{color:var(--txt);font-size:13.8px;line-height:1.62;max-width:78ch}
+.ff-list{list-style:none;display:grid;gap:5px;margin:2px 0 0}
+.ff-list li{position:relative;padding-left:18px;color:var(--txt-2);font-size:13.2px;line-height:1.55}
+.ff-list li::before{
+  content:"";position:absolute;left:4px;top:8px;width:5px;height:5px;border-radius:1px;
+  background:var(--accent);transform:rotate(45deg)}
+.ff-caveat{
+  margin-top:10px;color:var(--txt-3);font-size:12.2px;line-height:1.55;max-width:82ch;
+  padding-left:11px;border-left:1px solid var(--line)}
+
+/* ---- XR Doctor ----------------------------------------------------------- */
+.doctor{display:grid;gap:6px;margin-bottom:var(--s5)}
+.doc-row{
+  display:grid;grid-template-columns:170px 150px 1fr;gap:var(--s3);align-items:center;
+  padding:10px 12px;border-radius:var(--r-sm);background:var(--surface-2);border:1px solid var(--line)}
+.doc-area{font-weight:620;font-size:13.2px}
+.doc-verdict{
+  display:inline-flex;align-items:center;gap:7px;color:var(--cond);
+  font-family:var(--mono);font-size:11.5px;letter-spacing:.05em;text-transform:uppercase}
+.doc-detail{color:var(--txt-2);font-size:12.6px;line-height:1.5}
+.sub-h{
+  font-size:12px;font-family:var(--mono);letter-spacing:.13em;text-transform:uppercase;
+  color:var(--txt-3);margin:var(--s5) 0 var(--s3);font-weight:600}
+
+/* ---- recommendations ----------------------------------------------------- */
+.reco{list-style:none;display:grid;gap:8px}
+.reco li{
+  display:grid;gap:3px;padding:11px 14px;border-radius:var(--r-sm);
+  background:var(--surface-2);border:1px solid var(--line);border-left:3px solid var(--txt-3)}
+.reco li b{font-size:13.4px;font-weight:640}
+.reco li span{color:var(--txt-2);font-size:12.8px;line-height:1.55}
+.reco-critical{border-left-color:var(--fail)}
+.reco-attention{border-left-color:var(--warn)}
+.reco-info{border-left-color:var(--accent)}
+
+/* ---- evaluation areas ---------------------------------------------------- */
+.area-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(216px,1fr));gap:var(--s3)}
+.area{
+  padding:14px 16px;border:1px solid var(--line);border-radius:var(--r-sm);
+  background:var(--surface-2);display:grid;gap:9px;align-content:start}
+.a-top{display:flex;align-items:baseline;justify-content:space-between;gap:var(--s2)}
+.a-label{font-weight:640;font-size:13.4px}
+.a-marks{font-family:var(--mono);font-size:18px;font-variant-numeric:tabular-nums;color:var(--txt)}
+.a-marks small{color:var(--txt-3);font-size:12px}
+.a-bar{height:4px;border-radius:2px;background:var(--surface-3);overflow:hidden}
+.a-bar span{display:block;height:100%;background:var(--brand-grad);border-radius:2px}
+.a-blurb{color:var(--txt-3);font-size:12.2px;line-height:1.5}
+.area.static{gap:6px}
+
+/* ---- comparison ---------------------------------------------------------- */
+.cmp-meta{
+  display:flex;gap:var(--s5);flex-wrap:wrap;margin-bottom:var(--s3);
+  color:var(--txt-3);font-size:12.5px}
+.cmp-meta b{color:var(--txt-2);font-weight:600}
+.trend{
+  font-family:var(--mono);font-size:11px;letter-spacing:.06em;text-transform:uppercase;
+  padding:3px 9px;border-radius:999px;border:1px solid var(--line);color:var(--txt-3)}
+.trend.improved{color:var(--pass);border-color:var(--pass-line);background:var(--pass-soft)}
+.trend.regressed{color:var(--fail);border-color:var(--fail-line);background:var(--fail-soft)}
+.trend.unchanged{color:var(--txt-2)}
+.report-strip{margin-bottom:var(--s4)}
+.report-strip .entity-chip{cursor:pointer;text-align:left;font:inherit;border-color:var(--line)}
+.report-strip .entity-chip.on{border-color:var(--accent-line);background:var(--accent-soft)}
+
+/* ---- retention banner ---------------------------------------------------- */
+.retention{
+  display:flex;align-items:center;gap:var(--s3);flex-wrap:wrap;
+  padding:12px 16px;margin-bottom:var(--s4);border-radius:var(--r-sm);
+  border:1px solid var(--accent-line);background:var(--accent-soft)}
+.retention.expired{border-color:var(--fail-line);background:var(--fail-soft)}
+.ret-dot{
+  width:8px;height:8px;border-radius:50%;background:var(--accent);flex:none;
+  box-shadow:0 0 0 4px var(--accent-soft)}
+.retention.expired .ret-dot{background:var(--fail);box-shadow:0 0 0 4px var(--fail-soft)}
+.ret-text{flex:1;min-width:260px;color:var(--txt-2);font-size:12.7px;line-height:1.55}
+.ret-text b{color:var(--txt)}
+.ret-timer{
+  font-family:var(--mono);font-size:12px;color:var(--accent);letter-spacing:.04em;
+  font-variant-numeric:tabular-nums;white-space:nowrap}
+.ret-timer.gone{color:var(--fail)}
+
+/* ---- landing ------------------------------------------------------------- */
+.lede{color:var(--txt-2);font-size:14.6px;line-height:1.65;max-width:64ch;margin-top:var(--s3)}
+.flow{list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(232px,1fr));gap:var(--s3)}
+.flow-step{
+  display:grid;gap:5px;padding:14px 16px;border-radius:var(--r-sm);
+  background:var(--surface-2);border:1px solid var(--line);align-content:start}
+.fs-n{font-family:var(--mono);font-size:11px;color:var(--accent);letter-spacing:.1em}
+.fs-t{font-weight:660;font-size:14px}
+.fs-d{color:var(--txt-2);font-size:12.8px;line-height:1.55}
+.privacy-panel .priv-cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:var(--s3)}
+.priv-col{padding:14px 16px;border-radius:var(--r-sm);border:1px solid var(--line);background:var(--surface-2)}
+.priv-col.yes{border-color:var(--pass-line)}
+.priv-col.no{border-color:var(--fail-line)}
+.pc-head{
+  display:flex;align-items:center;gap:8px;font-family:var(--mono);font-size:11px;
+  letter-spacing:.11em;text-transform:uppercase;margin-bottom:10px}
+.priv-col.yes .pc-head{color:var(--pass)}
+.priv-col.no .pc-head{color:var(--fail)}
+.pc-dot{width:7px;height:7px;border-radius:50%;background:currentColor;flex:none}
+.priv-col ul{list-style:none;display:grid;gap:6px}
+.priv-col li{position:relative;padding-left:16px;color:var(--txt-2);font-size:12.9px;line-height:1.55}
+.priv-col li::before{
+  content:"";position:absolute;left:2px;top:8px;width:5px;height:5px;border-radius:50%;opacity:.75}
+.priv-col.yes li::before{background:var(--pass)}
+.priv-col.no li::before{background:var(--fail)}
+
+/* ---- static (non-interactive) validation rows, used on the docs page ----- */
+.check-row.static{grid-template-columns:auto 1fr}
+
+/* ---- compact dropzone inside a dialog ------------------------------------ */
+.dropzone.compact{padding:22px 18px}
+
+/* ---- site footer --------------------------------------------------------- */
+.sitefoot{
+  position:relative;z-index:1;display:flex;align-items:center;justify-content:center;gap:10px;
+  flex-wrap:wrap;padding:22px 20px 30px;margin-top:var(--s6);
+  border-top:1px solid var(--line-soft);color:var(--txt-3);font-size:12.4px}
+.foot-brand{
+  font-weight:680;letter-spacing:-.01em;
+  background:var(--brand-grad);-webkit-background-clip:text;background-clip:text;color:transparent}
+.sitefoot b{color:var(--txt-2);font-weight:620}
+.foot-sep{opacity:.5}
+
+/* ---- responsive ---------------------------------------------------------- */
+@media (max-width:860px){
+  .health-row,.doc-row{grid-template-columns:1fr;gap:5px}
+  .retention{align-items:flex-start}
+}
+
+/* Clarifies that Evaluation Areas classify the same 100 marks. */
+.area-note{margin-top:var(--s3);font-size:12.2px;line-height:1.6;max-width:92ch}
+
+/* =============================================================================
+   XR VALIDATION — promoted, and obviously interactive.
+
+   The checklist carries 40 of the 100 marks and only a human can fill it in, so
+   it must not read as a static list. Unassessed rows use a dashed neutral edge
+   and an accent "Select result" caption — deliberately NOT amber, because
+   verdict hues stay reserved for PASS / WARN / FAIL.
+   ============================================================================= */
+
+.section.validation{border-color:var(--accent-line)}
+.section.validation.incomplete{
+  background:linear-gradient(180deg,var(--accent-soft),transparent 120px)}
+
+.validation-lead{margin-bottom:var(--s4)}
+.vl-text{color:var(--txt-2);font-size:13.4px;line-height:1.65;max-width:88ch}
+.vl-text b{color:var(--txt)}
+.vl-warn{color:var(--accent-bright);font-weight:600}
+.vl-progress{
+  margin-top:12px;height:4px;border-radius:2px;background:var(--surface-3);
+  overflow:hidden;max-width:420px}
+.vl-progress span{
+  display:block;height:100%;border-radius:2px;background:var(--brand-grad);
+  transition:width var(--dur) var(--ease)}
+
+/* ---- row states ---------------------------------------------------------- */
+.check-row.todo{
+  border-left:2px dashed var(--accent-line);
+  background:linear-gradient(90deg,var(--accent-soft),transparent 40%)}
+.check-row.done{border-left:2px solid var(--line)}
+
+.check-state.unassessed{
+  color:var(--accent-bright);font-weight:600;letter-spacing:.01em}
+
+/* ---- the segmented control, with a visible affordance -------------------- */
+.seg-wrap{display:grid;gap:4px;justify-items:end}
+.seg-caption{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.11em;text-transform:uppercase;
+  color:var(--txt-3)}
+.check-row.todo .seg-caption{color:var(--accent)}
+.check-row.todo .seg{box-shadow:0 0 0 1px var(--accent-line)}
+.seg{transition:box-shadow var(--dur) var(--ease)}
+.seg:hover{box-shadow:0 0 0 1px var(--accent-line)}
+
+@media (max-width:860px){
+  .seg-wrap{justify-items:start}
+}
+
+/* ---- closing call to action --------------------------------------------- */
+.section.finish{
+  border-color:var(--accent-line);
+  background:linear-gradient(120deg,var(--accent-soft),transparent 60%)}
+
+/* =============================================================================
+   IMMERSITEST — brand lockup
+
+   Hierarchy: ImmersiTest is the product and reads first; Wizardlenz XR Studio
+   is the vendor mark and stays deliberately quieter and smaller. The supplied
+   horizontal logo is 620x159 (3.899:1) and is only ever scaled by width with
+   height:auto, so it can never be distorted or cropped.
+   ============================================================================= */
+
+.vendor-logo{
+  display:block;
+  width:158px;              /* ~40px tall at the supplied 3.899:1 ratio */
+  height:auto;              /* the ratio is never overridden */
+  flex:none;
+  opacity:.92;
+  /* The mark carries its own colour badge; a hair of contrast keeps it from
+     competing with the score ring and the brand gradient beside it. */
+  transition:opacity var(--dur) var(--ease);
+}
+.brand:hover .vendor-logo{opacity:1}
+
+.brand{display:flex;align-items:center;gap:14px;min-width:0}
+.brand-divider{
+  width:1px;height:26px;flex:none;
+  background:linear-gradient(180deg,transparent,var(--line),transparent)}
+
+/* ---- help page vendor panel --------------------------------------------- */
+.vendor-panel{border-color:var(--line)}
+.vendor-lockup{
+  display:flex;align-items:center;gap:var(--s5);flex-wrap:wrap}
+.vendor-logo.lg{width:230px;opacity:1}
+.vendor-copy{flex:1;min-width:280px;display:grid;gap:12px}
+.vendor-copy p{color:var(--txt-2);font-size:13.6px;line-height:1.65;max-width:70ch}
+.vendor-motto{display:grid;gap:2px}
+.vendor-motto b{color:var(--txt);font-size:13.5px;font-weight:660}
+.vendor-motto span{
+  color:var(--accent-bright);font-style:italic;font-size:13.5px;letter-spacing:.01em}
+
+/* ---- footer -------------------------------------------------------------- */
+.sitefoot{
+  display:flex;align-items:baseline;justify-content:center;gap:var(--s5);
+  flex-wrap:wrap;text-align:center}
+.foot-product{display:inline-flex;align-items:baseline;gap:10px;flex-wrap:wrap;justify-content:center}
+.foot-tag{color:var(--txt-3);font-size:12.2px}
+.foot-vendor{display:inline-flex;align-items:baseline;gap:10px;flex-wrap:wrap;justify-content:center}
+.foot-copy{color:var(--txt-3);opacity:.75}
+.foot-mode{font-size:11.8px;opacity:.8}
+
+/* ---- responsive ---------------------------------------------------------- */
+@media (max-width:1100px){
+  .vendor-logo{width:140px}
+}
+@media (max-width:860px){
+  /* The vendor mark must never dominate the bar on a small screen. */
+  .vendor-logo{width:112px}
+  .brand{gap:10px}
+  .brand-divider{height:20px}
+  .vendor-logo.lg{width:180px}
+  .sitefoot{gap:var(--s3)}
+}
+@media (max-width:540px){
+  .vendor-logo{width:96px}
+  .brand-divider{display:none}
+  .brand-text .sub{display:none}
+  .vendor-logo.lg{width:150px}
+}
+
+/* =============================================================================
+   Unity package CTA, footer legal line, validation progress.
+   ============================================================================= */
+
+/* ---- Unity Asset Store call to action ------------------------------------ */
+.unity-cta{
+  display:flex;align-items:center;justify-content:space-between;gap:var(--s5);
+  flex-wrap:wrap;padding:24px 26px;border-radius:var(--r);
+  border:1px solid var(--accent-line);
+  background:linear-gradient(110deg,var(--accent-soft),transparent 62%)}
+.uc-text{flex:1;min-width:280px}
+.uc-head{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  font-weight:660;font-size:14.5px;color:var(--txt);margin-bottom:6px}
+.uc-note{
+  font-family:var(--mono);font-size:10px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--accent);padding:3px 8px;border-radius:999px;
+  border:1px solid var(--accent-line);background:var(--surface-2)}
+.unity-cta p{color:var(--txt-2);font-size:13.2px;line-height:1.6;max-width:74ch}
+.uc-btn{flex:none;white-space:nowrap}
+
+/* ---- Help: titled steps -------------------------------------------------- */
+.flow.steps .flow-step{gap:6px}
+.flow.steps .fs-t{font-size:14.5px}
+
+/* ---- footer legal + company link ----------------------------------------- */
+.foot-legal{display:inline-flex;align-items:baseline;gap:6px;flex-wrap:wrap}
+.foot-company{
+  color:var(--txt-2);font-weight:620;text-decoration:none;
+  border-bottom:1px solid transparent;
+  transition:color var(--dur) var(--ease),border-color var(--dur) var(--ease)}
+.foot-company:hover,.foot-company:focus-visible{
+  color:var(--accent-bright);border-bottom-color:var(--accent-line)}
+.foot-company .ext{
+  display:inline-block;margin-left:4px;font-size:.85em;opacity:.7;
+  transform:translateY(-1px)}
+.foot-company:hover .ext{opacity:1}
+
+/* ---- XR validation completion counter ------------------------------------ */
+.chk-progress{
+  margin-left:10px;font-family:var(--mono);font-size:10.5px;letter-spacing:.11em;
+  text-transform:uppercase;padding:3px 9px;border-radius:999px;
+  border:1px solid var(--line);color:var(--txt-2);background:var(--surface-2);
+  vertical-align:middle}
+.chk-progress.incomplete{color:var(--accent);border-color:var(--accent-line)}
+.chk-progress.complete{color:var(--pass);border-color:var(--pass-line);background:var(--pass-soft)}
+
+/* ---- capture strip sits high on the page; keep it visually quiet --------- */
+.section.capture .infostrip{row-gap:8px}
+
+@media (max-width:860px){
+  .unity-cta{align-items:flex-start}
+  .uc-btn{width:100%;text-align:center}
+}
+
+/* =============================================================================
+   IMMERSITEST — VISUAL EVOLUTION
+
+   The lens as the organising idea: aperture, focus brackets, measurement ticks,
+   telemetry type. Engineered, not decorative. Every ambient layer is cheap
+   (transform/opacity only), every hover belongs to a real control, and all of
+   it collapses under prefers-reduced-motion.
+   ============================================================================= */
+
+/* ---- layer 5: a very slow optical scan across the whole page -------------- */
+/* One element, one transform, 34s cycle. Masked so it only reads near the top,
+   where it cannot sit behind body copy. */
+.scanline{
+  position:fixed;inset:0;z-index:0;pointer-events:none;overflow:hidden;contain:strict;
+  mask-image:linear-gradient(180deg,#000 0%,#000 30%,transparent 72%)}
+.scanline::after{
+  content:'';position:absolute;top:-20%;left:-30%;width:36%;height:140%;
+  background:linear-gradient(100deg,transparent,rgba(124,107,245,.055),transparent);
+  transform:translate3d(-40%,0,0) rotate(8deg);
+  animation:sweep 34s cubic-bezier(.4,0,.2,1) infinite;
+  will-change:transform}
+@keyframes sweep{
+  0%,100%{transform:translate3d(-45%,0,0) rotate(8deg);opacity:0}
+  12%{opacity:1}
+  50%{transform:translate3d(320%,0,0) rotate(8deg);opacity:1}
+  62%{opacity:0}}
+
+/* ---- layer 6: distant telemetry marks ------------------------------------- */
+/* Corner coordinates that read as instrument chrome. Never near content. */
+.telemetry{
+  position:fixed;inset:0;z-index:0;pointer-events:none;
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.16em;
+  color:var(--txt-3);opacity:.22;text-transform:uppercase}
+.telemetry span{position:absolute;white-space:nowrap}
+.telemetry .t-tl{top:calc(var(--shell-h) + 18px);left:20px}
+.telemetry .t-tr{top:calc(var(--shell-h) + 18px);right:20px}
+.telemetry .t-bl{bottom:16px;left:20px}
+.telemetry .t-br{bottom:16px;right:20px}
+@media (max-width:1100px){.telemetry{display:none}}
+
+/* ---- technical eyebrow ----------------------------------------------------- */
+.eyebrow.tech{display:inline-flex;align-items:center;gap:9px}
+.eb-tick{
+  width:22px;height:1px;background:linear-gradient(90deg,var(--accent),transparent);
+  position:relative;flex:none}
+.eb-tick::before{
+  content:'';position:absolute;left:0;top:-2px;width:1px;height:5px;background:var(--accent)}
+
+/* =============================================================================
+   HERO
+   ============================================================================= */
+/* The copy is indented ~11% from the card's left edge so the wordmark never
+   runs into the accent rail, while the lens keeps a shallower right inset and
+   stays the full 420px. Percentages are resolved against the hero's own width,
+   so the inset scales with the container instead of the viewport. */
+.hero.cinematic{
+  padding:clamp(28px,5vw,64px) clamp(24px,4.5%,64px)
+          clamp(20px,3vw,40px) clamp(28px,11%,148px);
+}
+.hero.cinematic .hero-inner{
+  display:grid;grid-template-columns:minmax(0,1.05fr) minmax(0,.95fr);
+  gap:clamp(24px,5vw,64px);align-items:center}
+.hero-copy{min-width:0}
+.hero.cinematic h1{
+  font-size:clamp(44px,7.2vw,86px);line-height:.98;letter-spacing:-.035em;
+  margin:10px 0 6px;
+  background:var(--brand-grad);-webkit-background-clip:text;background-clip:text;
+  color:transparent}
+.hero.cinematic .tagline{
+  display:grid;gap:1px;font-size:clamp(15px,1.6vw,19px);
+  color:var(--txt-2);font-weight:500;letter-spacing:-.005em}
+.hero.cinematic .tagline span:last-child{color:var(--txt-3)}
+.lede.signature{
+  margin-top:var(--s4);font-size:clamp(14px,1.5vw,16.5px);line-height:1.6;
+  color:var(--txt-3);max-width:44ch}
+.lede.signature b{
+  color:var(--txt);font-weight:620;
+  /* the product statement — the one line that should stick */
+  }
+.hero-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:var(--s5)}
+.btn.lg{padding:12px 22px;font-size:14px}
+.hero.cinematic .pipeline{margin-top:var(--s5)}
+
+/* ---- the diagnostic lens --------------------------------------------------- */
+.hero-visual{display:flex;justify-content:center;align-items:center;min-width:0}
+.lens{position:relative;width:min(100%,420px);aspect-ratio:1;isolation:isolate}
+.lens-svg{
+  width:100%;height:100%;display:block;overflow:visible;
+  transition:transform 1.1s cubic-bezier(.16,1,.3,1)}
+.lens-rim,.lens-orbit,.lens-brackets{
+  transform-origin:160px 160px;
+  transition:transform 1.1s cubic-bezier(.16,1,.3,1)}
+.lens-orbit{animation:orbit 48s linear infinite;transform-box:fill-box}
+@keyframes orbit{to{transform:rotate(360deg)}}
+.lens-trace{
+  stroke-dasharray:1200;stroke-dashoffset:1200;
+  animation:trace 3.4s cubic-bezier(.16,1,.3,1) .35s forwards}
+.lens-trace.slow{animation-duration:4.6s;animation-delay:.7s}
+@keyframes trace{to{stroke-dashoffset:0}}
+.lens-scan{animation:lensScan 9s cubic-bezier(.45,0,.55,1) infinite}
+@keyframes lensScan{
+  0%,100%{transform:translateX(0)}
+  50%{transform:translateX(226px)}}
+
+.lens-read{
+  position:absolute;font-family:var(--mono);font-size:10px;letter-spacing:.09em;
+  text-transform:uppercase;display:grid;gap:2px;color:var(--txt-3);
+  padding:6px 9px;border-radius:var(--r-sm);
+  background:rgba(17,20,33,.62);border:1px solid var(--line-soft);
+  backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.lens-read b{color:var(--txt);font-size:12.5px;font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.lens-read.tl{top:4%;left:-2%}
+.lens-read.tr{top:12%;right:-4%}
+.lens-read.bl{bottom:14%;left:-4%}
+.lens-read.br{bottom:3%;right:-1%}
+.lens-caption{
+  position:absolute;left:50%;bottom:-6%;transform:translateX(-50%);
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.28em;color:var(--accent);
+  opacity:.75}
+.lens-caption::after{
+  content:'';display:inline-block;width:4px;height:4px;border-radius:50%;
+  background:var(--accent);margin-left:8px;vertical-align:middle;
+  animation:pulse 2.6s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:.25}50%{opacity:1}}
+
+@media (max-width:980px){
+  /* Single column: the asymmetric indent has nothing to balance against, so
+     the copy re-centres on a symmetric inset. */
+  .hero.cinematic{padding-left:clamp(24px,6%,56px);padding-right:clamp(24px,6%,56px)}
+  .hero.cinematic .hero-inner{grid-template-columns:1fr}
+  .hero-visual{order:-1;margin-bottom:var(--s4)}
+  .lens{width:min(78vw,320px)}
+  .lens-read.tr,.lens-read.bl{display:none}
+}
+@media (max-width:860px){
+  .hero.cinematic{padding-left:22px;padding-right:22px}
+}
+@media (max-width:540px){
+  /* Keep the product name and CTA above the fold on a phone. */
+  .hero-visual{display:none}
+  .hero.cinematic{padding-left:18px;padding-right:18px}
+}
+
+/* =============================================================================
+   NEW TEST — the four-stage sequence
+   ============================================================================= */
+/* Two routes in. 01 is the product; 02 is the fallback, so it is quieter:
+   same structure, lower contrast, no accent rail. */
+.paths-section{padding-top:20px;padding-bottom:20px}
+.paths{list-style:none;display:flex;align-items:stretch;gap:0;flex-wrap:wrap;margin:0}
+.path{
+  flex:1 1 340px;display:flex;gap:16px;padding:20px 22px;
+  border:1px solid var(--line);border-radius:var(--r-sm);background:var(--surface-2);
+  position:relative;overflow:hidden}
+.path.primary{
+  border-color:var(--accent-line);
+  background:linear-gradient(150deg,rgba(91,140,255,.055),var(--surface-2) 62%)}
+.path.primary::before{
+  content:'';position:absolute;left:0;top:0;bottom:0;width:2px;
+  background:linear-gradient(180deg,transparent,var(--accent) 26%,var(--violet) 78%,transparent)}
+.p-n{
+  font-family:var(--mono);font-size:11px;letter-spacing:.14em;color:var(--txt-3);
+  flex:none;padding-top:2px}
+.path.primary .p-n{color:var(--accent)}
+.p-body{display:grid;gap:7px;min-width:0}
+.p-title{font-weight:660;font-size:15px;letter-spacing:-.012em;color:var(--txt)}
+.p-text{color:var(--txt-2);font-size:13.2px;line-height:1.62;max-width:56ch}
+.p-steps{
+  list-style:none;display:flex;flex-wrap:wrap;align-items:center;gap:7px;margin-top:3px;
+  font-family:var(--mono);font-size:10px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--txt-3)}
+.p-steps li{display:flex;align-items:center;gap:7px}
+.p-steps li:not(:last-child)::after{content:'→';color:var(--line);font-size:11px}
+.path.primary .p-steps{color:var(--accent);opacity:.85}
+.path-or{
+  list-style:none;flex:0 0 54px;align-self:center;display:flex;align-items:center;
+  justify-content:center;font-family:var(--mono);font-size:10px;letter-spacing:.18em;
+  text-transform:uppercase;color:var(--txt-3)}
+.path-or span{position:relative;padding:0 2px}
+@media (max-width:900px){
+  .paths{flex-direction:column;gap:10px}
+  .path-or{flex:none;height:26px}
+}
+
+/* Help: the quieter "already ran a test" route, under the Asset Store CTA. */
+.cta-alt{
+  margin-top:16px;padding-top:15px;border-top:1px solid var(--line-soft);
+  color:var(--txt-2);font-size:13px;line-height:1.62;max-width:78ch}
+.cta-alt b{color:var(--txt);font-weight:600;margin-right:5px}
+
+/* =============================================================================
+   HELP — five-stage pipeline
+   ============================================================================= */
+.pipeline-stages{list-style:none;display:grid;gap:0;margin:0}
+.pstage{display:grid;grid-template-columns:28px 1fr;gap:var(--s3)}
+.ps-rail{display:grid;grid-template-rows:auto 1fr;justify-items:center;padding-top:5px}
+.ps-node{
+  width:10px;height:10px;border-radius:50%;flex:none;
+  background:var(--surface);border:1.5px solid var(--accent);
+  box-shadow:0 0 0 3px var(--accent-soft)}
+.ps-line{width:1px;height:100%;min-height:22px;
+  background:linear-gradient(180deg,var(--accent-line),var(--line-soft))}
+.ps-body{display:grid;gap:3px;padding-bottom:var(--s5)}
+.pstage:last-child .ps-body{padding-bottom:0}
+.ps-n{font-family:var(--mono);font-size:10.5px;letter-spacing:.14em;color:var(--accent)}
+.ps-t{font-weight:660;font-size:15px;letter-spacing:-.01em}
+.ps-d{color:var(--txt-2);font-size:13.2px;line-height:1.6;max-width:72ch}
+
+/* The CTA is its own block, not a sixth step: give it real separation. */
+.cta-section{margin-top:var(--s6)}
+
+/* =============================================================================
+   REPORT — instrument treatments
+   ============================================================================= */
+
+/* ---- optical framing around the score ------------------------------------- */
+.verdict.framed{position:relative}
+.v-bracket{
+  position:absolute;width:16px;height:16px;pointer-events:none;
+  border-color:var(--accent-line);border-style:solid;border-width:0;opacity:.85}
+.v-bracket.tl{top:9px;left:9px;border-top-width:1.5px;border-left-width:1.5px;border-radius:3px 0 0 0}
+.v-bracket.tr{top:9px;right:9px;border-top-width:1.5px;border-right-width:1.5px;border-radius:0 3px 0 0}
+.v-bracket.bl{bottom:9px;left:9px;border-bottom-width:1.5px;border-left-width:1.5px;border-radius:0 0 0 3px}
+.v-bracket.br{bottom:9px;right:9px;border-bottom-width:1.5px;border-right-width:1.5px;border-radius:0 0 3px 0}
+
+/* ---- metric tiles as measurement instruments ------------------------------ */
+.metric{position:relative;overflow:hidden}
+.m-ticks{
+  position:absolute;top:0;left:0;right:0;height:5px;pointer-events:none;opacity:.5;
+  background-image:repeating-linear-gradient(90deg,var(--line) 0 1px,transparent 1px 9px)}
+.metric .val{font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.metric .label{
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase}
+
+/* ---- the human / machine divider above XR Validation ---------------------- */
+.human-divider{
+  display:flex;align-items:center;gap:var(--s3);margin-bottom:var(--s4);
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;
+  color:var(--txt-3);flex-wrap:wrap}
+.hd-rule{
+  flex:1;min-width:40px;height:1px;
+  background:linear-gradient(90deg,var(--line),var(--accent-line))}
+.hd-side.accent{color:var(--accent)}
+.chk-sub{
+  margin:-2px 0 var(--s4);color:var(--txt-2);font-size:14px;letter-spacing:-.005em}
+
+/* ---- XR Health scan tag ---------------------------------------------------- */
+.scan-tag{
+  margin-left:10px;font-family:var(--mono);font-size:9.5px;letter-spacing:.15em;
+  text-transform:uppercase;color:var(--accent);padding:3px 9px;border-radius:999px;
+  border:1px solid var(--accent-line);background:var(--accent-soft);vertical-align:middle}
+
+/* ---- XR Doctor reading order legend --------------------------------------- */
+.doc-legend{
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:var(--s3);
+  font-family:var(--mono);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
+  color:var(--txt-3)}
+.doc-legend i{color:var(--accent);font-style:normal;opacity:.7}
+
+/* ---- Fix First priority stack --------------------------------------------- */
+.fixfirst[data-rank]::after{
+  content:attr(data-rank);position:absolute;top:14px;right:18px;
+  font-family:var(--mono);font-size:22px;letter-spacing:.02em;
+  color:var(--txt);opacity:.10;font-weight:700}
+.ff-next{list-style:none;display:grid;gap:8px;margin-top:var(--s3)}
+.ffn{
+  display:grid;grid-template-columns:34px 1fr;gap:var(--s3);align-items:start;
+  padding:12px 14px;border-radius:var(--r-sm);background:var(--surface-2);
+  border:1px solid var(--line);border-left:2px solid var(--txt-3)}
+.ffn.critical{border-left-color:var(--fail)}
+.ffn.attention{border-left-color:var(--warn)}
+.ffn-n{
+  font-family:var(--mono);font-size:13px;color:var(--txt-3);
+  font-variant-numeric:tabular-nums;padding-top:1px}
+.ffn-body{display:grid;gap:2px}
+.ffn-body b{font-size:13.4px;font-weight:640}
+.ffn-body span{color:var(--txt-2);font-size:12.8px;line-height:1.55}
+
+/* =============================================================================
+   CURSOR / FOCUS — interactive elements only
+   ============================================================================= */
+/* Genuinely clickable things get edge illumination and a 1px lift. Read-only
+   telemetry (metric tiles, health rows, stat cards) deliberately does not. */
+.btn,.navlink,.entity-chip,.uc-btn,.foot-company,tr.clickable,.seg button{
+  transition:transform var(--dur) var(--ease),box-shadow var(--dur) var(--ease),
+             border-color var(--dur) var(--ease),color var(--dur) var(--ease),
+             background var(--dur) var(--ease)}
+.btn:hover,.uc-btn:hover{transform:translateY(-1px)}
+.btn.primary:hover{box-shadow:0 0 0 1px var(--accent-line),0 6px 20px -8px var(--accent-glow)}
+.btn:active,.uc-btn:active{transform:translateY(0)}
+tr.clickable:hover{box-shadow:inset 2px 0 0 var(--accent)}
+.navlink{position:relative}
+.navlink::after{
+  content:'';position:absolute;left:10px;right:10px;bottom:4px;height:1px;
+  background:var(--accent);transform:scaleX(0);transform-origin:left;
+  transition:transform var(--dur) var(--ease)}
+.navlink:hover::after,.navlink[aria-current="page"]::after{transform:scaleX(1)}
+
+/* =============================================================================
+   REDUCED MOTION — everything ambient stops
+   ============================================================================= */
+@media (prefers-reduced-motion:reduce){
+  .scanline::after,.lens-orbit,.lens-scan,.lens-caption::after{animation:none}
+  .lens-trace,.lens-trace.slow{animation:none;stroke-dashoffset:0}
+  .lens-svg,.lens-rim,.lens-orbit,.lens-brackets{transition:none}
+  .btn:hover,.uc-btn:hover{transform:none}
+  .navlink::after{transition:none}
+}

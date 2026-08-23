@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+
+# Local database and imported reports — this is user data, not source.
+# It is created automatically on first `npm start`.
+data/*.db
+data/*.db-wal
+data/*.db-shm
+data/reports/*.json
+
+# Built Unity package (assembled from compiled DLLs by scripts/build-unity-package.js)
+dist/
+
+# Browser libraries vendored from node_modules by `npm install`
+web/vendor/
+
+# Logs / runtime
+*.log
+npm-debug.log*
+coverage/
+
+# Unity (reports written by XRTestProfiler in the Editor)
+unity/**/XRTestReports/
+*.csproj
+*.sln
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Environment — real secrets never enter the repository.
+# .env.example is the documented template and is deliberately kept.
+.env
+.env.*
+!.env.example
+
+# Local editor/tool configuration — machine-specific, not project source.
+.claude/settings.local.json
+
+# Unity project artifacts. Defensive: the Unity projects live outside this
+# repository today, but these must never be committed if one is ever placed
+# inside it.
+Library/
+Temp/
+obj/
+Build/
+UserSettings/
+Logs/
