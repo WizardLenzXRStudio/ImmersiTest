@@ -20,7 +20,7 @@ import { validateReport, explain, SUPPORTED_SCHEMAS } from '../ingest/validate.j
 import {
   createSession, getSession, deleteSession, addReport, getReport,
   setChecklistResult, SessionFullError, DuplicateReportError, stats,
-} from '../services/analysisStore.js';
+} from '../services/store.js';
 import { CHECKLIST } from '../../../shared/xr-metrics/index.js';
 
 const router = Router();
@@ -112,7 +112,7 @@ function extractReport(body) {
 }
 
 /** Validates and stores one report, translating store errors into HTTP ones. */
-function acceptReport(session, body, source) {
+async function acceptReport(session, body, source) {
   const { doc, filename } = extractReport(body);
 
   // Re-serialising is intentional: the stored copy is canonical JSON produced
@@ -128,7 +128,7 @@ function acceptReport(session, body, source) {
   }
 
   try {
-    return addReport(session, result.report, {
+    return await addReport(session, result.report, {
       filename,
       source,
       warnings: result.warnings,
@@ -155,20 +155,20 @@ function acceptReport(session, body, source) {
 router.post(
   '/analyze',
   uploadLimiter,
-  wrap((req, res) => {
+  wrap(async (req, res) => {
     const requested = req.query.token;
     let session;
     let created = false;
 
     if (requested) {
-      session = getSession(String(requested));
+      session = await getSession(String(requested));
       if (!session) throw new AppError(410, 'SESSION_EXPIRED', 'That analysis session has expired or does not exist.');
     } else {
-      session = createSession();
+      session = await createSession();
       created = true;
     }
 
-    const report = acceptReport(session, req.body, requested ? 'browser' : 'unity');
+    const report = await acceptReport(session, req.body, requested ? 'browser' : 'unity');
 
     res.status(201).json({
       token: session.token,
@@ -189,8 +189,8 @@ router.post(
 
 /* ----------------------------------------------------------------- reading -- */
 
-function requireSession(req) {
-  const session = getSession(req.params.token);
+async function requireSession(req) {
+  const session = await getSession(req.params.token);
   if (!session) {
     throw new AppError(
       410,
@@ -204,8 +204,8 @@ function requireSession(req) {
 router.get(
   '/analysis/:token',
   noIndex,
-  wrap((req, res) => {
-    res.json({ session: serializeSession(requireSession(req)) });
+  wrap(async (req, res) => {
+    res.json({ session: serializeSession(await requireSession(req)) });
   }),
 );
 
@@ -214,9 +214,9 @@ router.post(
   '/analysis/:token/reports',
   uploadLimiter,
   noIndex,
-  wrap((req, res) => {
-    const session = requireSession(req);
-    const report = acceptReport(session, req.body, 'browser');
+  wrap(async (req, res) => {
+    const session = await requireSession(req);
+    const report = await acceptReport(session, req.body, 'browser');
     res.status(201).json({
       reportId: report.id,
       reportCount: session.reports.length,
@@ -228,8 +228,8 @@ router.post(
 router.put(
   '/analysis/:token/reports/:reportId/checklist/:itemId',
   noIndex,
-  wrap((req, res) => {
-    const session = requireSession(req);
+  wrap(async (req, res) => {
+    const session = await requireSession(req);
     if (!CHECKLIST.some((c) => c.id === req.params.itemId)) throw badRequest('Unknown checklist item');
 
     const { result } = req.body ?? {};
@@ -237,7 +237,7 @@ router.put(
       throw badRequest('result must be pass, warn, fail or null');
     }
 
-    const checklist = setChecklistResult(session, req.params.reportId, req.params.itemId, result ?? null);
+    const checklist = await setChecklistResult(session, req.params.reportId, req.params.itemId, result ?? null);
     if (!checklist) throw notFound('Report not found in this analysis');
     res.json({ checklist });
   }),
@@ -247,8 +247,8 @@ router.put(
 router.delete(
   '/analysis/:token',
   noIndex,
-  wrap((req, res) => {
-    const existed = deleteSession(req.params.token);
+  wrap(async (req, res) => {
+    const existed = await deleteSession(req.params.token);
     if (!existed) throw new AppError(410, 'SESSION_EXPIRED', 'That analysis has already been deleted or expired.');
     res.json({ deleted: true });
   }),
@@ -257,7 +257,7 @@ router.delete(
 /** Operational counters. Exposes totals only — never a token or a report. */
 router.get(
   '/analysis-stats',
-  wrap((req, res) => res.json(stats())),
+  wrap(async (req, res) => res.json(await stats())),
 );
 
 export default router;

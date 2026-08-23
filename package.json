@@ -17,6 +17,7 @@
     "postinstall": "node scripts/vendor-assets.js"
   },
   "dependencies": {
+    "@upstash/redis": "^1.38.2",
     "chart.js": "^4.4.7",
     "exceljs": "^4.4.0",
     "express": "^5.0.1",
